@@ -76,10 +76,10 @@ class Encoder(nn.Module):
         x = self.res2(x)
         x = self.pooling(x)
         x = x.view(batch_size, -1)
-        # return x
-        mean = self.relu(self.enc_mean(x))
-        var = F.softplus(self.enc_var(x))
-        return mean, var
+        return x
+        # mean = self.relu(self.enc_mean(x))
+        # var = F.softplus(self.enc_var(x))
+        # return mean, var
 
 
 class Decoder(nn.Module):
@@ -97,7 +97,7 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         batch_size = x.shape[0]
-        x = self.relu(self.fc(x))
+        # x = self.relu(self.fc(x))
         x = x.view(batch_size, 16, 6, 6, 6)
         x = self.conv_t0(x)
         # x = self.batch(x)
@@ -115,8 +115,8 @@ class Decoder(nn.Module):
 class AutoEncoder(nn.Module):
     def __init__(self):
         super(AutoEncoder, self).__init__()
-        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.device = "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cpu"
         dim = 16*6**3
 
         self.enc = Encoder(dim).to(self.device)
@@ -202,14 +202,13 @@ class VAELoss(nn.Module):
         super().__init__()
         self.alpha = alpha
 
-    def forward(self, outputs, targets, mean, var):
+    def forward(self, outputs, targets, mean=1, var=0):
         reconstruction_loss = F.binary_cross_entropy(outputs, targets)
-        # reconstruction_loss = F.mse_loss(outputs, targets)
-        # reconstruction_loss = torch.mean(torch.sum(targets * torch.log(outputs) + (1 - targets) * torch.log(1 - outputs)))
 
-        kld = -0.5 * torch.sum(1 + torch.log(var) - mean**2 - var)
+        # kld = -0.5 * torch.sum(1 + torch.log(var) - mean**2 - var)
 
-        return (1-self.alpha)*reconstruction_loss + self.alpha*kld
+        # return (1-self.alpha)*reconstruction_loss + self.alpha*kld
+        return reconstruction_loss
 
 
 def get_trainer(root):

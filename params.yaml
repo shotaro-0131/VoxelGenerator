@@ -1,0 +1,13 @@
+dataset:
+  train_path: ../einherjar/datasetx20
+  test_path: ../einherjar/datasetx20
+preprocess:
+  grid_size: 20
+model:
+  name: vae
+optimizer:
+  algorithm: Adam
+  learning_rate: 0.01
+training:
+  batch_size: 30
+  epoch: 20
