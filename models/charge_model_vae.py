@@ -8,6 +8,8 @@ from torch import optim
 import torch
 import os
 from models.charge_model import *
+import pytorch_lightning as pl
+
 INPUT_DIM = 3
 OUTPUT_DIM = 3
 GRID_SIZE = 20
@@ -122,3 +124,23 @@ def get_trainer(root):
     loss = VAELoss()
 
     return Trainer(model, train_data, loss)
+
+
+def get_dataset(root):
+    for i, h5filename in enumerate(traverse(root)):
+        with h5py.File(h5filename) as h5:
+            if i == 3:
+                break
+            if i == 0:
+                protein_data = np.array(
+                    h5['protein'], dtype=np.float32)[:, [0, 1, 2, 6]]
+                ligand_data = np.array(
+                    h5['ligand'][:, :OUTPUT_DIM], dtype=np.float32)
+                continue
+            protein_data = np.concatenate([protein_data, np.array(
+                h5['protein'], dtype=np.float32)[:, [0, 1, 2, 6]]])
+            ligand_data = np.concatenate([ligand_data, np.array(
+                h5['ligand'][:, :OUTPUT_DIM], dtype=np.float32)])
+
+    train_data = DataSet(protein_data, ligand_data)
+    return train_data

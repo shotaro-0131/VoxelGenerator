@@ -1,6 +1,6 @@
 dataset:
-  train_path: ../einherjar/datasetx20
-  test_path: ../einherjar/datasetx20
+  train_path: "/../einherjar/datasetx20"
+  test_path: /../einherjar/datasetx20
 preprocess:
   grid_size: 20
 model:
@@ -11,3 +11,6 @@ optimizer:
 training:
   batch_size: 30
   epoch: 20
+hydra:
+  run:
+    dir: output/
