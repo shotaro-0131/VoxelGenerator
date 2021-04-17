@@ -49,8 +49,7 @@ class WrapperModel(pl.LightningModule):
 
 @hydra.main(config_name="params")
 def main(cfg: DictConfig) -> None:
-    print(torch.__version__)
-    pl.seed_everything(0)
+    # pl.seed_everything(0)
     
     dataloader = DataLoader(
         get_dataset(hydra.utils.to_absolute_path("")+cfg.dataset.train_path), batch_size=cfg.training.batch_size, num_workers=8)

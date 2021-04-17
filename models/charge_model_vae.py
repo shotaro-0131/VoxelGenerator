@@ -108,6 +108,8 @@ def get_trainer(root):
 
     for i, h5filename in enumerate(traverse(root)):
         with h5py.File(h5filename) as h5:
+            if i == 3:
+                break
             if i == 0:
                 protein_data = np.array(
                     h5['protein'], dtype=np.float32)[:, [0, 1, 2, 6]]
