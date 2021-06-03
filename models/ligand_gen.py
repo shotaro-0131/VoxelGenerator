@@ -76,10 +76,10 @@ class Encoder(nn.Module):
         x = self.res2(x)
         x = self.pooling(x)
         x = x.view(batch_size, -1)
-        return x
-        # mean = self.relu(self.enc_mean(x))
-        # var = F.softplus(self.enc_var(x))
-        # return mean, var
+        # return x
+        mean = self.relu(self.enc_mean(x))
+        var = F.softplus(self.enc_var(x))
+        return mean, var
 
 
 class Decoder(nn.Module):

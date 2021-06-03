@@ -5,6 +5,9 @@ import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
+from datasets.voxel_dataset import *
+import pandas as pd
+import os
 
 
 def print_auto_logged_info(r):
@@ -30,7 +33,7 @@ class WrapperModel(pl.LightningModule):
         super(WrapperModel, self).__init__()
         self.model = model
         self.loss = loss
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(device)
 
     def forward(self, x):
@@ -50,15 +53,19 @@ class WrapperModel(pl.LightningModule):
 @hydra.main(config_name="params")
 def main(cfg: DictConfig) -> None:
     # pl.seed_everything(0)
-    
+    data = pd.read_csv(os.path.join(
+        hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
+
     dataloader = DataLoader(
-        get_dataset(hydra.utils.to_absolute_path("")+cfg.dataset.train_path), batch_size=cfg.training.batch_size, num_workers=8)
+        DataSet(data["pdb_id"].values,
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
     trainer = pl.Trainer(max_epochs=cfg.training.epoch,
-                         progress_bar_refresh_rate=20, gpus=1)
-    m = ConcatVAEModel()
+                         progress_bar_refresh_rate=20, gpus=cfg.training.gpu_num)
+    m = AutoEncoder()
     loss = VAELoss()
     model = WrapperModel(m, loss)
     train(trainer, dataloader, model)
+    print("dfjasdjfoiaj")
 
 
 if __name__ == "__main__":

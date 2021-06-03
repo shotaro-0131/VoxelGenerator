@@ -1,14 +1,16 @@
 dataset:
-  train_path: "/../einherjar/datasetx20"
-  test_path: /../einherjar/datasetx20
+  train_path: pdb_bind_data.csv
+  test_path: pdb_bind_data.csv
 preprocess:
   grid_size: 20
+  cell_size: 1
 model:
   name: vae
 optimizer:
   algorithm: Adam
   learning_rate: 0.01
 training:
+  gpu_num: 1
   batch_size: 30
   epoch: 20
 hydra:

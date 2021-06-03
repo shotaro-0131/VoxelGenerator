@@ -1,10 +1,31 @@
+from utils.preprocess import *
+import torch
+import os
+import hydra
 class DataSet:
-    def __init__(self, train, label):
-        self.train = train
-        self.label = label
+    def __init__(self, pdb_id, voxel_size=1, voxel_num=20):
+        self.pdb_id = pdb_id
+        self.voxel_size = voxel_size
+        self.voxel_num = voxel_num
+        self.data_dir = ["..", "..", "..", "v2019-other-PL"]
+        self.root = hydra.utils.to_absolute_path("")
+        self.protein_path = "_pocket.pdb"
+        self.ligand_path = "_ligand.mol2"
 
     def __len__(self):
-        return len(self.train)
+        return len(self.pdb_id)
 
     def __getitem__(self, index):
-        return self.train[index], self.label[index]
+        protein_path = os.path.join(
+            self.root, *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.protein_path)
+        ligand_path = os.path.join(self.root, *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.ligand_path)
+        print(protein_path)
+
+        input_data, output_data = get_points(
+            protein_path, ligand_path, self.voxel_num, self.voxel_size)
+        input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)[:3]
+        output_data = to_voxel(
+            output_data, self.voxel_num, self.voxel_size)[:3]
+        input_data = torch.FloatTensor(input_data)
+        output_data = torch.FloatTensor(output_data)
+        return input_data, output_data

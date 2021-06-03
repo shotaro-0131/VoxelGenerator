@@ -12,13 +12,13 @@ import pytorch_lightning as pl
 
 INPUT_DIM = 3
 OUTPUT_DIM = 3
-GRID_SIZE = 20
 
 
 class ConcatVAEModel(nn.Module):
-    def __init__(self):
+    def __init__(self, grid_size=20):
         super(ConcatVAEModel, self).__init__()
-        dim = ((GRID_SIZE-8)//2)**3*16
+        self.grid_size = grid_size
+        dim = ((self.grid_size-8)//2)**3*16
         self.chargeModel = ChargeModel(dim)
         self.gridModel = Encoder(dim)
         self.enc_mean = nn.Linear(dim, dim)
@@ -30,7 +30,7 @@ class ConcatVAEModel(nn.Module):
         batch_size = x.shape[0]
         x1 = x[:, :INPUT_DIM]
         x2 = x[:, INPUT_DIM].view(
-            batch_size, 1, GRID_SIZE, GRID_SIZE, GRID_SIZE)
+            batch_size, 1, self.grid_size, self.grid_size, self.grid_size)
         x2 = self.chargeModel(x2)
         x1 = self.gridModel(x1)
         x = x1 + x2
