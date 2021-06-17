@@ -1,16 +1,18 @@
 import math
-from rdkit.Chem import AllChem
-from rdkit import Chem
+# from rdkit.Chem import AllChem
+# from rdkit import Chem
 import json
 import gzip
 import os.path
 import sys
 import numpy as np
-from Bio import PDB
+# from Bio import PDB
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import warnings
-
+# from rdkit import RDLogger
+import cmd
+import pymol
 GRID_LENGTH = 20
 
 
@@ -65,7 +67,7 @@ def filter_mol_atoms(mol):
 
 def filter_atoms(atoms):
     for a in atoms:
-        if a.get_parent().get_id()[0] == ' ' and a.element in atoms_info:
+        if a[3] in atoms_info:
             yield a
     # raise StopIteration
 
@@ -83,10 +85,11 @@ def calc_center(residue):
 def calc_center_ligand(mol):
     acc = np.zeros(3)
     i = 0
-    for m in mol.GetConformers():
-        for p in m.GetPositions():
-            acc += p
-            i += 1
+    for m in mol:
+        x, y, z, _ = m
+        p = [x, y, z]
+        acc += p
+        i += 1
     return acc / i
 
 
@@ -94,34 +97,20 @@ def get_atom_index(atom):
     return atoms_info[atom]
 
 
-def centering_protein(structure, center, square_length=20):
+def centering(structure, center, square_length=20):
     points = []
 
-    for a in filter_atoms(structure.get_atoms()):
-        if a.get_parent().get_id()[0] == ' ':
-            x = a.get_coord() - center
-            if all((np.abs(x[i]) < square_length/2 for i in range(3))):
-                points.append(np.concatenate([x, [get_atom_index(a.element)]]))
+    for a in filter_atoms(structure):
+        x, y, z, atom = a
+        p = [x, y, z] - center
+        if all((np.abs(p[i]) < square_length/2 for i in range(3))):
+            points.append(np.concatenate([p, [get_atom_index(atom)]]))
     return points
-
-
-def centering_ligand(ligand, center, square_length=20):
-    points = []
-    for mol in ligand.GetConformers():
-        for a, c in zip(ligand.GetAtoms(), mol.GetPositions()):
-            if not(a.GetSymbol().upper() in atoms_info.keys()):
-                continue
-            x = c - center
-            if all(np.abs(xyz) < square_length/2 for xyz in x):
-                points.append(np.concatenate(
-                    [x, [get_atom_index(a.GetSymbol().upper())]]))
-        return points
-
 
 def proc_structure(pocket, ligand, grid_length):
     if ligand != None:
         ligand_center = calc_center_ligand(ligand)
-        yield centering_protein(pocket, ligand_center, grid_length), centering_ligand(ligand, ligand_center, grid_length)
+        yield centering(pocket, ligand_center, grid_length), centering(ligand, ligand_center, grid_length)
 
 
 def read_pdb(filename):
@@ -140,11 +129,16 @@ def read_pdb(filename):
 
 
 def get_mol(filename):
+    # RDLogger.DisableLog('rdApp.*')
+    warnings.filterwarnings('ignore')
+    cmd = pymol.cmd
     base, ext = os.path.splitext(filename)
-    if ext == '.mol2':
-        mol = Chem.rdmolfiles.MolFromMol2File(filename, removeHs=False)
-    elif ext == ".pdb":
-        mol = Chem.MolFromPDBFile(filename, removeHs=False)
+    mol = []
+    
+    if ext == '.mol2' or ext == '.sdf' or ext == ".pdb":
+        cmd.delete("all")
+        cmd.load(filename)
+        cmd.iterate_state(1, 'all', 'mol.append([x, y, z, elem])', space=locals(), atomic=0)
     else:
         raise Exception()
     return mol
@@ -152,13 +146,13 @@ def get_mol(filename):
 
 def get_points(protein_file_path, ligand_file_path, n_cell=20, cell_size=1):
     grid_length = n_cell*cell_size
-    parser = PDB.PDBParser()
+    # parser = PDB.PDBParser()
     pdb_path = protein_file_path
     mol2_path = ligand_file_path
     protein_points = []
     ligand_points = []
     if os.path.exists(pdb_path) and os.path.exists(mol2_path):
-        p = read_pdb(pdb_path)
+        p = get_mol(pdb_path)
         l = get_mol(mol2_path)
         # p_mol = get_mol(pdb_path)
         for d in proc_structure(p, l, grid_length):
@@ -225,3 +219,53 @@ def savegrid(d, filename, grid_size=20, hreshold=0.2):
     ax = fig.gca(projection='3d')
     ax.voxels(voxels, facecolors=colors, edgecolor='k')
     plt.savefig(filename, dpi=140)
+
+def score_grid(true_points, target_grid, is_rotation=True):
+    for i in range(target_grid.shape[0]):
+        if bool(random.getrandbits(1)):
+            image1 = np.squeeze(batch[i])
+            # rotate along z-axis
+            angle = random.uniform(-max_angle, max_angle)
+            image2 = scipy.ndimage.interpolation.rotate(
+                image1, angle, mode='nearest', axes=(0, 1), reshape=False)
+
+            # rotate along y-axis
+            angle = random.uniform(-max_angle, max_angle)
+            image3 = scipy.ndimage.interpolation.rotate(
+                image2, angle, mode='nearest', axes=(0, 2), reshape=False)
+
+            # rotate along x-axis
+            angle = random.uniform(-max_angle, max_angle)
+            batch_rot[i] = scipy.ndimage.interpolation.rotate(
+                image3, angle, mode='nearest', axes=(1, 2), reshape=False)
+
+        else:
+            batch_rot[i] = batch[i]
+
+import numpy as np
+import math as m
+  
+def Rx(theta):
+  return np.matrix([[ 1, 0           , 0           ],
+                   [ 0, m.cos(theta),-m.sin(theta)],
+                   [ 0, m.sin(theta), m.cos(theta)]])
+  
+def Ry(theta):
+  return np.matrix([[ m.cos(theta), 0, m.sin(theta)],
+                   [ 0           , 1, 0           ],
+                   [-m.sin(theta), 0, m.cos(theta)]])
+  
+def Rz(theta):
+  return np.matrix([[ m.cos(theta), -m.sin(theta), 0 ],
+                   [ m.sin(theta), m.cos(theta) , 0 ],
+                   [ 0           , 0            , 1 ]])
+
+def rotate(points, phi, theta, psi):
+    ps, atoms = shaping(points)
+    R = Rz(psi) * Ry(theta) * Rz(phi)
+    outputs = []
+    for i in range(len(ps)):
+        t = np.array(R * ps[i]).reshape(1,-1).tolist()[0]
+        t.append(atoms[i])
+        outputs.append(t)
+    return outputs

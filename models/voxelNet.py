@@ -1,3 +1,5 @@
+import random
+from utils.preprocess import *
 import os
 import torch
 from torch import optim
@@ -60,12 +62,14 @@ class VFE(nn.Module):
 
     def forward(self, x):
         batch_size = x.shape[0]
-        local_f = self.mlp(x.view(batch_size*self.point_num, -1)).view(batch_size, self.point_num, -1)
+        local_f = self.mlp(x.view(batch_size*self.point_num, -1)
+                           ).view(batch_size, self.point_num, -1)
 #         for i in range(self.point_num):
 #             local_f[:, i] = self.mlp(x[:, i])
         global_f = self.pooling(local_f.view(local_f.shape[0], int(
             self.output_dim/2), self.point_num)).squeeze()
-        element_f = torch.zeros((x.shape[0], self.point_num, self.output_dim)).to(self.device)
+        element_f = torch.zeros(
+            (x.shape[0], self.point_num, self.output_dim)).to(self.device)
         for i in range(self.point_num):
             element_f[:, i] = torch.cat([local_f[:, i], global_f], dim=1)
         element_f = element_f.view(x.shape[0], self.output_dim, self.point_num)
@@ -82,8 +86,10 @@ class VoxelNet(nn.Module):
         # must be even number
         self.device = device
         self.point_feature_dim = 200
-        self.vfe1 = VFE(self.max_sample_num, 6, self.point_feature_dim, self.device)
-        self.vfe2 = VFE(self.max_sample_num, self.point_feature_dim, self.point_feature_dim, self.device)
+        self.vfe1 = VFE(self.max_sample_num, 6,
+                        self.point_feature_dim, self.device)
+        self.vfe2 = VFE(self.max_sample_num, self.point_feature_dim,
+                        self.point_feature_dim, self.device)
         self.conv = Conv(self.input_channel, 10)
         self.dec = Decoder(10, self.output_dim)
         self.fc = nn.Linear(self.point_feature_dim, self.input_channel)
@@ -94,9 +100,10 @@ class VoxelNet(nn.Module):
         # output (BatchSize, voxel_num, point_num, (x, y, z, channel_atom))
         batch_size = x.shape[0]
         x = self.vfe1(x.view(batch_size*int(pow(self.voxel_num, 3)), -1))
-        voxel_feature = self.point_maxpool(self.vfe2(x.view(batch_size*int(pow(self.voxel_num,3)),-1))).squeeze()
+        voxel_feature = self.point_maxpool(
+            self.vfe2(x.view(batch_size*int(pow(self.voxel_num, 3)), -1))).squeeze()
 #         x = self.fc(voxel_feature).view(batch_size, self.input_channel, self.voxel_num, self.voxel_num, self.voxel_num)
-        
+
 #         voxel_feature = self.point_maxpool(self.voxel_wise(inputs.view(batch_size*int(pow(self.voxel_num,3)))).view(batch_size, self.point_feature_dim, self.voxel_num, self.voxel_num, self.voxel_num))
 #         for x in range(self.voxel_num):
 #             for y in range(self.voxel_num):
@@ -108,8 +115,6 @@ class VoxelNet(nn.Module):
         return x
 
 
-from utils.preprocess import *
-import random
 class DataSet(object):
     def __init__(self, protein_file_path, ligand_file_path):
         self.protein_file_path = protein_file_path
@@ -123,10 +128,13 @@ class DataSet(object):
         return len(self.protein_file_path)
 
     def __getitem__(self, index):
-        protein_path = os.path.join(self.data_dir, self.protein_file_path[index])
+        protein_path = os.path.join(
+            self.data_dir, self.protein_file_path[index])
         ligand_path = os.path.join(self.data_dir, self.ligand_file_path[index])
-        input_data, output_data = get_points(protein_path, ligand_path, self.voxel_num, self.voxel_size)
-        output_data = to_voxel(output_data, self.voxel_num, self.voxel_size)[:3]
+        input_data, output_data = get_points(
+            protein_path, ligand_path, self.voxel_num, self.voxel_size)
+        output_data = to_voxel(
+            output_data, self.voxel_num, self.voxel_size)[:3]
         input_data = self.sample(input_data)
 #         input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)[:3]
         input_data = torch.FloatTensor(input_data)
@@ -150,15 +158,14 @@ class DataSet(object):
             else:
                 v_idx = 0
             if v_idx == self.max_sample_num-1:
-                print("aaaa")
                 continue
             # voxel[idx][v_idx] = d
             voxel[idx][v_idx][0] = d[0]
             voxel[idx][v_idx][1] = d[1]
             voxel[idx][v_idx][2] = d[2]
-            voxel[idx][v_idx][3] = 1 if d[3]==0 else 0
-            voxel[idx][v_idx][4] = 1 if d[3]==1 else 0
-            voxel[idx][v_idx][5] = 1 if d[3]==2 else 0
+            voxel[idx][v_idx][3] = 1 if d[3] == 0 else 0
+            voxel[idx][v_idx][4] = 1 if d[3] == 1 else 0
+            voxel[idx][v_idx][5] = 1 if d[3] == 2 else 0
             voxel_hash[idx] = v_idx+1
         return np.array(voxel).reshape(self.voxel_num, self.voxel_num, self.voxel_num, self.max_sample_num, 3+3)
 

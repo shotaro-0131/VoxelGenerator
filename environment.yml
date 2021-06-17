@@ -1,0 +1,12 @@
+name: pymol
+channels:
+  - conda-forge
+  - pytorch
+  - schrodinger
+dependencies:
+  # - numpy=1.19
+  # - torchaudio
+  # - torchvision
+  # - pytorch=1.8.1
+  # - cudatoolkit=10.2
+  - pymol

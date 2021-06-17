@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import h5py
+# import h5py
 import numpy as np
 from torch.utils.data import DataLoader
 from torch import optim
@@ -9,8 +9,7 @@ import os
 from datasets.voxel_dataset import DataSet
 
 INPUT_DIM = 3
-OUTPUT_DIM = 3
-
+OUTPUT_DIM = 2
 
 class PermEq(nn.Module):
     def __init__(self, input_dim):
@@ -49,10 +48,10 @@ class ResBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, voxel_size, input_dim=INPUT_DIM):
         super(Encoder, self).__init__()
-        self.batch1 = nn.BatchNorm3d(INPUT_DIM)
-        self.conv1 = nn.Conv3d(INPUT_DIM, 32, 4)
+        self.batch1 = nn.BatchNorm3d(input_dim)
+        self.conv1 = nn.Conv3d(input_dim, 32, 4)
         self.batch2 = nn.BatchNorm3d(32)
         self.conv2 = nn.Conv3d(32, 16, 4)
         self.conv3 = nn.Conv3d(64, 16, 4)
@@ -60,15 +59,16 @@ class Encoder(nn.Module):
         self.res2 = ResBlock(16, 6)
         self.pooling = nn.MaxPool3d(3, stride=2)
         self.relu = nn.ReLU()
-        self.enc_var = PermEq(dim)
-        self.enc_mean = PermEq(dim)
-        # self.fc = nn.Linear(11*11*11*32, dim)
+        dim = 16*int((voxel_size-6)/2-1)**3
+        self.fc = nn.Linear(dim, dim)
+        self.enc_var = nn.Linear(dim, dim)
+        self.enc_mean = nn.Linear(dim, dim)
 
     def forward(self, x):
         batch_size = x.shape[0]
-        x = self.batch1(x)
+        # x = self.batch1(x)
         x = self.conv1(x)
-        x = F.relu(x)
+        x = self.relu(x)
         x = self.batch2(x)
         x = self.res1(x)
         x = self.conv2(x)
@@ -76,51 +76,55 @@ class Encoder(nn.Module):
         x = self.res2(x)
         x = self.pooling(x)
         x = x.view(batch_size, -1)
-        # return x
-        mean = self.relu(self.enc_mean(x))
-        var = F.softplus(self.enc_var(x))
-        return mean, var
+        return x
+        # mean = self.relu(self.enc_mean(x))
+        # var = F.softplus(self.enc_var(x))
+        # return mean, var
 
 
 class Decoder(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, voxel_size):
         super(Decoder, self).__init__()
-        self.conv_t0 = nn.ConvTranspose3d(16, 64, 3, stride=2, padding=1)
-        self.conv_t1 = nn.ConvTranspose3d(64, 64, 3, stride=2)
+        self.conv_t0 = nn.ConvTranspose3d(16, 64, 3, stride=2, output_padding=1)
+        self.conv_t1 = nn.ConvTranspose3d(64, 32, 4)
         self.batch = nn.BatchNorm3d(64)
-        self.conv_t2 = nn.ConvTranspose3d(64, 64, 4)
+        self.conv_t2 = nn.ConvTranspose3d(32, 32, 4)
         self.relu = nn.ReLU()
         self.res1 = ResBlock(64, 6)
-        self.res2 = ResBlock(64, 6)
-        self.conv_t3 = nn.Conv3d(64, OUTPUT_DIM, 4)
-        self.fc = nn.Linear(dim, dim)
+        self.res2 = ResBlock(32, 6)
+        dim = 16*int((voxel_size-6)/2-1)**3
+        self.voxel_size = int((voxel_size-6)/2-1)
+        self.conv_t3 = nn.Conv3d(32, OUTPUT_DIM, 3, stride=1, padding=1)
+        self.fc = nn.Linear(dim,  dim)
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax()
 
     def forward(self, x):
         batch_size = x.shape[0]
         # x = self.relu(self.fc(x))
-        x = x.view(batch_size, 16, 6, 6, 6)
+        x = x.view(batch_size, 16, self.voxel_size, self.voxel_size, self.voxel_size)
         x = self.conv_t0(x)
+        x = self.relu(x)
         # x = self.batch(x)
         x = self.res1(x)
         x = self.conv_t1(x)
-        x = F.relu(x)
-        # x = self.conv_t2(x)
+        x = self.relu(x)
+        x = self.conv_t2(x)
         # x = F.relu(x)
         x = self.res2(x)
         x = self.conv_t3(x)
-        x = torch.sigmoid(x)
+        x = self.sigmoid(x)
         return x
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, voxel_size):
         super(AutoEncoder, self).__init__()
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         # self.device = "cpu"
-        dim = 16*6**3
 
-        self.enc = Encoder(dim).to(self.device)
-        self.dec = Decoder(dim).to(self.device)
+        self.enc = Encoder(voxel_size).to(self.device)
+        self.dec = Decoder(voxel_size).to(self.device)
 
     def forward(self, x):
         mean, var = self.enc(x)
@@ -134,9 +138,46 @@ class AutoEncoder(nn.Module):
         return z
 
     def sampling(self, mean, var):
-        epsilon = torch.randn(mean.shape)
+        epsilon = torch.randn(mean.shape).to(self.device)
         return mean + torch.sqrt(var) * epsilon
 
+class ConModel(nn.Module):
+    def __init__(self, voxel_size):
+        super(ConModel, self).__init__()
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+        self.enc1 = Encoder(voxel_size, 2).to(self.device)
+        self.enc2 = Encoder(voxel_size, 1).to(self.device)
+        self.dec = Decoder(voxel_size).to(self.device)
+        self.voxel_size = voxel_size
+        dim = 16*int((voxel_size-6)/2-1)**3
+        self.enc_var = nn.Linear(dim, dim)
+        self.enc_mean = nn.Linear(dim, dim)
+        self.relu = nn.ReLU()
+
+
+    def forward(self, x):
+        batch_size = x.shape[0]
+        x1 = x[:, :2]
+        x2 = x[:, 2].view(
+            batch_size, 1, self.voxel_size, self.voxel_size, self.voxel_size)
+        x1 = self.enc1(x1)
+        x2 = self.enc2(x2)
+        var = F.softplus(self.enc_var(x1+x2))
+        mean = self.relu(self.enc_mean(x1+x2))
+        z = self.sampling(mean, var)
+        x = self.dec(z)
+        return x, mean, var
+
+    def get_z(self, x):
+        mean1, var1 = self.enc1(x)
+        mean2, var2 = self.enc2(x)
+        z = self.sampling(mean1+mean2, var1+var2)
+        return z
+
+    def sampling(self, mean, var):
+        epsilon = torch.randn(mean.shape).to(self.device)
+        return mean + torch.sqrt(var) * epsilon
 
 class Trainer:
     def __init__(self, model, dataset, criterion, batch_size=10, epoch=10, display=True, auto_save=True):
@@ -198,17 +239,17 @@ def traverse(root):
 
 
 class VAELoss(nn.Module):
-    def __init__(self, alpha=0.001):
+    def __init__(self, alpha=0):
         super().__init__()
         self.alpha = alpha
+        self.kldiv = nn.KLDivLoss(reduction="sum")
 
     def forward(self, outputs, targets, mean=1, var=0):
         reconstruction_loss = F.binary_cross_entropy(outputs, targets)
 
-        # kld = -0.5 * torch.sum(1 + torch.log(var) - mean**2 - var)
-
-        # return (1-self.alpha)*reconstruction_loss + self.alpha*kld
-        return reconstruction_loss
+        kld = -0.5 * torch.sum(1 + torch.log(var) - mean**2 - var)
+        return (1-self.alpha)*reconstruction_loss + self.alpha*kld
+        # return reconstruction_loss
 
 
 def get_trainer(root):

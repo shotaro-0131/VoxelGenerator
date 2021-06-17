@@ -6,10 +6,12 @@ preprocess:
   cell_size: 1
 model:
   name: vae
+  experiment_id: 0
 optimizer:
   algorithm: Adam
   learning_rate: 0.01
 training:
+  name: Default
   gpu_num: 1
   batch_size: 30
   epoch: 20

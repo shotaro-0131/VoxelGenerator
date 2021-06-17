@@ -1,6 +1,6 @@
 import hydra
 from omegaconf import DictConfig, omegaconf
-from models.charge_model_vae import *
+from models.ligand_gen import *
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 import pytorch_lightning as pl
@@ -21,9 +21,10 @@ def print_auto_logged_info(r):
     print("tags: {}".format(tags))
 
 
-def train(trainer: pl.Trainer, dataloader: DataLoader, model: pl.LightningModule) -> None:
+def train(trainer: pl.Trainer, dataloader: DataLoader, model: pl.LightningModule, tags: dict, experiment_id: int) -> None:
     mlflow.pytorch.autolog()
-    with mlflow.start_run() as run:
+    with mlflow.start_run(experiment_id=experiment_id) as run:
+        mlflow.set_tags(tags)
         trainer.fit(model, dataloader)
     print_auto_logged_info(mlflow.get_run(run_id=run.info.run_id))
 
@@ -55,17 +56,17 @@ def main(cfg: DictConfig) -> None:
     # pl.seed_everything(0)
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
-
+    tags = {"voxel_size": cfg.preprocess.grid_size,
+        "cell_size": cfg.preprocess.cell_size}
     dataloader = DataLoader(
-        DataSet(data["pdb_id"].values,
+        DataSet(data["pdb_id"].values[:10000],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
     trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                          progress_bar_refresh_rate=20, gpus=cfg.training.gpu_num)
-    m = AutoEncoder()
+    m = ConModel(cfg.preprocess.grid_size)
     loss = VAELoss()
     model = WrapperModel(m, loss)
-    train(trainer, dataloader, model)
-    print("dfjasdjfoiaj")
+    train(trainer, dataloader, model, tags, cfg.model.experiment_id)
 
 
 if __name__ == "__main__":
