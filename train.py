@@ -63,7 +63,7 @@ def main(cfg: DictConfig) -> None:
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
     trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                          progress_bar_refresh_rate=20, gpus=cfg.training.gpu_num)
-    m = ConModel(cfg.preprocess.grid_size)
+    m = AutoEncoder(cfg.preprocess.grid_size)
     loss = VAELoss()
     model = WrapperModel(m, loss)
     train(trainer, dataloader, model, tags, cfg.model.experiment_id)

@@ -159,6 +159,13 @@ def get_points(protein_file_path, ligand_file_path, n_cell=20, cell_size=1):
             protein_points, ligand_points = d
         return protein_points, ligand_points
 
+def xyz(array, p, cell_size=1):
+    _, X, Y, Z, _ = array.shape
+    i = int((p[0] + X*cell_size/2)/cell_size)
+    j = int((p[1] + Y*cell_size/2)/cell_size)
+    k = int((p[2] + Z*cell_size/2)/cell_size)
+    atom_index = int(p[3])
+    array[atom_index, i, j, k] = [(p[0] + X*cell_size/2)-i*cell_size, (p[1] + Y*cell_size/2)-j*cell_size, (p[2] + Z*cell_size/2)-k*cell_size]
 
 def fill_cell(array, p, cell_size=1):
     _, X, Y, Z = array.shape
@@ -184,6 +191,12 @@ def to_voxel(points, n_cell=20, cell_size=1):
         fill_cell(voxel, point, cell_size)
     return voxel
 
+def to_delta_xyz(points, n_cell=20, cell_size=1):
+    voxel = np.zeros(n_cell**3 * len(atoms_info) * 3, dtype=np.int8)\
+        .reshape([len(atoms_info), n_cell, n_cell, n_cell, 3])
+    for point in points:
+        xyz(voxel, point, cell_size)
+    return voxel
 
 def process_grid(array, grid_size=20, hreshold=0.2):
     new_array = np.zeros((6, grid_size, grid_size, grid_size), dtype=bool)
@@ -269,3 +282,4 @@ def rotate(points, phi, theta, psi):
         t.append(atoms[i])
         outputs.append(t)
     return outputs
+
