@@ -1,3 +1,4 @@
+import math as m
 import math
 # from rdkit.Chem import AllChem
 # from rdkit import Chem
@@ -107,6 +108,7 @@ def centering(structure, center, square_length=20):
             points.append(np.concatenate([p, [get_atom_index(atom)]]))
     return points
 
+
 def proc_structure(pocket, ligand, grid_length):
     if ligand != None:
         ligand_center = calc_center_ligand(ligand)
@@ -134,11 +136,12 @@ def get_mol(filename):
     cmd = pymol.cmd
     base, ext = os.path.splitext(filename)
     mol = []
-    
+
     if ext == '.mol2' or ext == '.sdf' or ext == ".pdb":
         cmd.delete("all")
         cmd.load(filename)
-        cmd.iterate_state(1, 'all', 'mol.append([x, y, z, elem])', space=locals(), atomic=0)
+        cmd.iterate_state(
+            1, 'all', 'mol.append([x, y, z, elem])', space=locals(), atomic=0)
     else:
         raise Exception()
     return mol
@@ -159,13 +162,16 @@ def get_points(protein_file_path, ligand_file_path, n_cell=20, cell_size=1):
             protein_points, ligand_points = d
         return protein_points, ligand_points
 
+
 def xyz(array, p, cell_size=1):
     _, X, Y, Z, _ = array.shape
     i = int((p[0] + X*cell_size/2)/cell_size)
     j = int((p[1] + Y*cell_size/2)/cell_size)
     k = int((p[2] + Z*cell_size/2)/cell_size)
     atom_index = int(p[3])
-    array[atom_index, i, j, k] = [(p[0] + X*cell_size/2)-i*cell_size, (p[1] + Y*cell_size/2)-j*cell_size, (p[2] + Z*cell_size/2)-k*cell_size]
+    array[atom_index, i, j, k] = [(p[0] + X*cell_size/2)-i*cell_size,
+                                  (p[1] + Y*cell_size/2)-j*cell_size, (p[2] + Z*cell_size/2)-k*cell_size]
+
 
 def fill_cell(array, p, cell_size=1):
     _, X, Y, Z = array.shape
@@ -191,12 +197,14 @@ def to_voxel(points, n_cell=20, cell_size=1):
         fill_cell(voxel, point, cell_size)
     return voxel
 
+
 def to_delta_xyz(points, n_cell=20, cell_size=1):
     voxel = np.zeros(n_cell**3 * len(atoms_info) * 3, dtype=np.int8)\
         .reshape([len(atoms_info), n_cell, n_cell, n_cell, 3])
     for point in points:
         xyz(voxel, point, cell_size)
     return voxel
+
 
 def process_grid(array, grid_size=20, hreshold=0.2):
     new_array = np.zeros((6, grid_size, grid_size, grid_size), dtype=bool)
@@ -233,6 +241,7 @@ def savegrid(d, filename, grid_size=20, hreshold=0.2):
     ax.voxels(voxels, facecolors=colors, edgecolor='k')
     plt.savefig(filename, dpi=140)
 
+
 def score_grid(true_points, target_grid, is_rotation=True):
     for i in range(target_grid.shape[0]):
         if bool(random.getrandbits(1)):
@@ -255,31 +264,31 @@ def score_grid(true_points, target_grid, is_rotation=True):
         else:
             batch_rot[i] = batch[i]
 
-import numpy as np
-import math as m
-  
+
 def Rx(theta):
-  return np.matrix([[ 1, 0           , 0           ],
-                   [ 0, m.cos(theta),-m.sin(theta)],
-                   [ 0, m.sin(theta), m.cos(theta)]])
-  
+    return np.matrix([[1, 0, 0],
+                     [0, m.cos(theta), -m.sin(theta)],
+                     [0, m.sin(theta), m.cos(theta)]])
+
+
 def Ry(theta):
-  return np.matrix([[ m.cos(theta), 0, m.sin(theta)],
-                   [ 0           , 1, 0           ],
-                   [-m.sin(theta), 0, m.cos(theta)]])
-  
+    return np.matrix([[m.cos(theta), 0, m.sin(theta)],
+                     [0, 1, 0],
+                     [-m.sin(theta), 0, m.cos(theta)]])
+
+
 def Rz(theta):
-  return np.matrix([[ m.cos(theta), -m.sin(theta), 0 ],
-                   [ m.sin(theta), m.cos(theta) , 0 ],
-                   [ 0           , 0            , 1 ]])
+    return np.matrix([[m.cos(theta), -m.sin(theta), 0],
+                     [m.sin(theta), m.cos(theta), 0],
+                     [0, 0, 1]])
+
 
 def rotate(points, phi, theta, psi):
     ps, atoms = shaping(points)
     R = Rz(psi) * Ry(theta) * Rz(phi)
     outputs = []
     for i in range(len(ps)):
-        t = np.array(R * ps[i]).reshape(1,-1).tolist()[0]
+        t = np.array(R * ps[i]).reshape(1, -1).tolist()[0]
         t.append(atoms[i])
         outputs.append(t)
     return outputs
-

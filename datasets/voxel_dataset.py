@@ -4,6 +4,7 @@ import os
 import hydra
 import numpy as np
 
+
 class DataSet:
     def __init__(self, pdb_id, voxel_size=1, voxel_num=20):
         self.pdb_id = pdb_id
@@ -33,9 +34,10 @@ class DataSet:
         input_data = torch.FloatTensor(input_data)
         output_data = torch.FloatTensor(output_data)
         return input_data, output_data
-    
+
     def random_rotation(points):
         rotate()
+
 
 class RPNDataSet:
     def __init__(self, pdb_id, voxel_size=1, voxel_num=20):
@@ -58,16 +60,21 @@ class RPNDataSet:
 
         input_points, output_points = get_points(
             protein_path, ligand_path, self.voxel_num, self.voxel_size)
-        input_data = to_voxel(input_points, self.voxel_num, self.voxel_size)[:3]
+        input_data = to_voxel(
+            input_points, self.voxel_num, self.voxel_size)[:3]
 
         output_data = to_voxel(
+            output_points, self.voxel_num, self.voxel_size)[:3+1]
+
+        seq_data = output_data.reshape((4, -1))
+
+        output_data[3] = np.array([1 if all([seq_data[j][i] == 0 for j in range(3)]) else 0 for i in range(
+            seq_data.shape[1])]).reshape((self.voxel_num, self.voxel_num, self.voxel_num))
+
+        input_reg = to_delta_xyz(
+            input_points, self.voxel_num, self.voxel_size)[:3]
+        output_reg = to_delta_xyz(
             output_points, self.voxel_num, self.voxel_size)[:3]
-        
-        input_reg = to_delta_xyz(input_points, self.voxel_num, self.voxel_size)[:3]
-        output_reg = to_delta_xyz(output_points, self.voxel_num, self.voxel_size)[:3]
         input_data = torch.FloatTensor(input_data)
         output_data = torch.FloatTensor(output_data)
         return input_data, input_reg, output_data, output_reg
-    
-    def random_rotation(points):
-        rotate()

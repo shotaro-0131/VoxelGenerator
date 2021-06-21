@@ -7,9 +7,11 @@ from torch import optim
 import torch
 import os
 from datasets.voxel_dataset import DataSet
+from models.RPN import *
 
 INPUT_DIM = 3
 OUTPUT_DIM = 3
+
 
 class PermEq(nn.Module):
     def __init__(self, input_dim):
@@ -85,7 +87,8 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, voxel_size):
         super(Decoder, self).__init__()
-        self.conv_t0 = nn.ConvTranspose3d(16, 64, 3, stride=2, output_padding=1)
+        self.conv_t0 = nn.ConvTranspose3d(
+            16, 64, 3, stride=2, output_padding=1)
         self.conv_t1 = nn.ConvTranspose3d(64, 32, 4)
         self.batch = nn.BatchNorm3d(64)
         self.conv_t2 = nn.ConvTranspose3d(32, 32, 4)
@@ -102,7 +105,8 @@ class Decoder(nn.Module):
     def forward(self, x):
         batch_size = x.shape[0]
         # x = self.relu(self.fc(x))
-        x = x.view(batch_size, 16, self.voxel_size, self.voxel_size, self.voxel_size)
+        x = x.view(batch_size, 16, self.voxel_size,
+                   self.voxel_size, self.voxel_size)
         x = self.conv_t0(x)
         x = self.relu(x)
         # x = self.batch(x)
@@ -115,6 +119,35 @@ class Decoder(nn.Module):
         x = self.conv_t3(x)
         x = self.sigmoid(x)
         return x
+
+
+class VoxelRPN(nn.Module):
+    def __init__(self, voxel_size):
+        super(VoxelRPN, self).__init__()
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cpu"
+        self.voxel_size = voxel_size
+        self.enc = Encoder(voxel_size).to(self.device)
+        self.dec = RPN(voxel_size).to(self.device)
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        mean, var = self.enc(x)
+        z = self.sampling(mean, var)
+        x = z.view(batch_size, 128, self.voxel_size*2,
+                   self.voxel_size*2, self.voxel_size*2)
+        clf, reg = self.dec(z)
+        return clf, reg, mean, var
+
+    def get_z(self, x):
+        mean, var = self.enc(x)
+        z = self.sampling(mean, var)
+        return z
+
+    def sampling(self, mean, var):
+        epsilon = torch.randn(mean.shape).to(self.device)
+        return mean + torch.sqrt(var) * epsilon
+
 
 class AutoEncoder(nn.Module):
     def __init__(self, voxel_size):
@@ -140,6 +173,7 @@ class AutoEncoder(nn.Module):
         epsilon = torch.randn(mean.shape).to(self.device)
         return mean + torch.sqrt(var) * epsilon
 
+
 class ConModel(nn.Module):
     def __init__(self, voxel_size):
         super(ConModel, self).__init__()
@@ -153,7 +187,6 @@ class ConModel(nn.Module):
         self.enc_var = nn.Linear(dim, dim)
         self.enc_mean = nn.Linear(dim, dim)
         self.relu = nn.ReLU()
-
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -177,6 +210,7 @@ class ConModel(nn.Module):
     def sampling(self, mean, var):
         epsilon = torch.randn(mean.shape).to(self.device)
         return mean + torch.sqrt(var) * epsilon
+
 
 class Trainer:
     def __init__(self, model, dataset, criterion, batch_size=10, epoch=10, display=True, auto_save=True):
