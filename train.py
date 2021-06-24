@@ -30,12 +30,14 @@ def train(trainer: pl.Trainer, dataloader: DataLoader, model: pl.LightningModule
 
 
 class WrapperModel(pl.LightningModule):
-    def __init__(self, model, loss):
+    def __init__(self, model, loss, val_data=None):
         super(WrapperModel, self).__init__()
         self.model = model
         self.loss = loss
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(device)
+        self.val_data = DataLoader(
+            val_data, batch_size=30, num_workers=8)
 
     def forward(self, x):
         return self.model(x)
@@ -47,6 +49,14 @@ class WrapperModel(pl.LightningModule):
         self.log("train_loss", loss, on_epoch=True)
         return loss
 
+    def training_epoch_end(self, _):
+        val_loss = 0
+        for d in self.val_data:
+            x, y = d
+            p, mean, var = self.model(x)
+            val_loss += self.loss(p, y, mean, var).item()
+        self.log("val_loss", val_loss, on_epoch=True)
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.0001)
 
@@ -57,15 +67,18 @@ def main(cfg: DictConfig) -> None:
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     tags = {"voxel_size": cfg.preprocess.grid_size,
-        "cell_size": cfg.preprocess.cell_size}
+            "cell_size": cfg.preprocess.cell_size}
     dataloader = DataLoader(
         DataSet(data["pdb_id"].values[:10000],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
+    val_data = DataSet(data["pdb_id"].values[10000:11000],
+                       cfg.preprocess.cell_size, cfg.preprocess.grid_size)
+
     trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                          progress_bar_refresh_rate=20, gpus=cfg.training.gpu_num)
     m = AutoEncoder(cfg.preprocess.grid_size)
     loss = VAELoss()
-    model = WrapperModel(m, loss)
+    model = WrapperModel(m, loss, val_data=val_data)
     train(trainer, dataloader, model, tags, cfg.model.experiment_id)
 
 
