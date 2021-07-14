@@ -9,13 +9,14 @@ class RPN(nn.Module):
     def __init__(self, grid_size):
         super(RPN, self).__init__()
         self.convs = nn.ModuleList(
-            [nn.Conv2D(128, 128, 3, 2, 1) if i % 3 == 0 else nn.Conv2D(128, 128, 3, 1, 1) for i in range(9)])
+            [nn.Conv3d(128, 128, 3, 2, 1) if i % 3 == 0 else nn.Conv3d(128, 128, 3, 1, 1) for i in range(9)])
         self.deconvs = nn.ModuleList(
-            [nn.ConvTranpose2D(128, 256, 3, 1, 0),
-             nn.ConvTranpose2D(128, 256, 2, 2, 0),
-             nn.ConvTranspose2D(256, 256, 4, 4, 0)])
-        self.cconv = nn.Conv2D(768, 2, 1, 1)
-        self.rconv = nn.Conv2D(768, 4, 1, 1)
+            [nn.ConvTranspose3d(128, 256, 3, 1, 1),
+             nn.ConvTranspose3d(128, 256, 2, 2, 0),
+             nn.ConvTranspose3d(128, 256, 4, 4, 1)])
+        self.cconv = nn.Conv3d(768, 2, 1, 1)
+        self.rconv = nn.Conv3d(768, 3, 1, 1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # rpn
@@ -31,8 +32,8 @@ class RPN(nn.Module):
         for i in range(6, 9):
             x = self.convs[i](x)
         feat3 = self.deconvs[2](x)
-        feat = torch.cat(feat1, feat2, feat3)
-        clf = F.sigmoid(self.cconv(feat))
+        feat = torch.cat((feat1, feat2, feat3), 1)
+        clf = self.sigmoid(self.cconv(feat))
         reg = self.rconv(feat)
         return clf, reg
 
@@ -46,13 +47,13 @@ class VoxelLoss(nn.Module):
 
     def forward(self, reg, cls, targets_reg, targets):
 
-        rm_pos_0 = reg * targets[:, 0]
-        targets_pos_0 = targets_reg * targets[:, 0]
+        rm_pos_0 = reg.permute(0,2,3,4,1) * torch.unsqueeze(targets[:, 0], -1)
+        targets_pos_0 = targets_reg[:, 0] * torch.unsqueeze(targets[:, 0], -1)
 
         cls_pos_loss = -targets[:, 0] * torch.log(cls[:, 0] + 1e-6)
         cls_pos_loss = cls_pos_loss.sum() / (targets[:, 0].sum() + 1e-6)
 
-        cls_neg_loss = -targets[:, -1] * torch.log(cls[:, 1] + 1e-6)
+        cls_neg_loss = -targets[:, -1] * torch.log(1 - cls[:, 0] + 1e-6)
         cls_neg_loss = cls_neg_loss.sum() / (targets[:, -1].sum() + 1e-6)
 
         reg_loss = self.smoothl1loss(rm_pos_0, targets_pos_0)

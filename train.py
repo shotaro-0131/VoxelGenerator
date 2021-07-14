@@ -21,11 +21,11 @@ def print_auto_logged_info(r):
     print("tags: {}".format(tags))
 
 
-def train(trainer: pl.Trainer, dataloader: DataLoader, model: pl.LightningModule, tags: dict, experiment_id: int) -> None:
+def train(trainer: pl.Trainer, dataloader: DataLoader, val_dataloader: DataLoader, model: pl.LightningModule, tags: dict, experiment_id: int) -> None:
     mlflow.pytorch.autolog()
     with mlflow.start_run(experiment_id=experiment_id) as run:
         mlflow.set_tags(tags)
-        trainer.fit(model, dataloader)
+        trainer.fit(model, dataloader, val_dataloader)
     print_auto_logged_info(mlflow.get_run(run_id=run.info.run_id))
 
 
@@ -36,8 +36,6 @@ class WrapperModel(pl.LightningModule):
         self.loss = loss
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(device)
-        self.val_data = DataLoader(
-            val_data, batch_size=30, num_workers=8)
 
     def forward(self, x):
         return self.model(x)
@@ -49,13 +47,24 @@ class WrapperModel(pl.LightningModule):
         self.log("train_loss", loss, on_epoch=True)
         return loss
 
+    def validation_step(self, batch, batch_nb):
+        x, y = batch
+        p, mean, var = self.forward(x)
+        val_loss = self.loss(p, y, mean, var)
+        self.log("val_loss", val_loss, on_epoch=True)
+        return {'val_loss': val_loss}
+
     def training_epoch_end(self, _):
         val_loss = 0
+        count = 0
         for d in self.val_data:
             x, y = d
+            x = x.to("cuda")
+            y = y.to("cuda")
             p, mean, var = self.model(x)
             val_loss += self.loss(p, y, mean, var).item()
-        self.log("val_loss", val_loss, on_epoch=True)
+            count += 1
+        self.log("val_loss", val_loss/count, on_epoch=True)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.0001)
@@ -78,8 +87,10 @@ def main(cfg: DictConfig) -> None:
                          progress_bar_refresh_rate=20, gpus=cfg.training.gpu_num)
     m = AutoEncoder(cfg.preprocess.grid_size)
     loss = VAELoss()
-    model = WrapperModel(m, loss, val_data=val_data)
-    train(trainer, dataloader, model, tags, cfg.model.experiment_id)
+    val_dataloader = DataLoader(
+            val_data, batch_size=30)
+    model = WrapperModel(m, loss)
+    train(trainer, dataloader, val_dataloader, model, tags, cfg.model.experiment_id)
 
 
 if __name__ == "__main__":

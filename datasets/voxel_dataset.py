@@ -14,7 +14,7 @@ class DataSet:
         # self.data_dir = ["/mnt/d", "v2019-other-PL"]
         self.root = hydra.utils.to_absolute_path("")
         self.protein_path = "_pocket.pdb"
-        self.ligand_path = "_ligand.mol2"
+        self.ligand_path = "_ligand.sdf"
 
     def __len__(self):
         return len(self.pdb_id)
@@ -47,7 +47,7 @@ class RPNDataSet:
         self.data_dir = ["D:", "v2019-other-PL"]
         self.root = hydra.utils.to_absolute_path("")
         self.protein_path = "_pocket.pdb"
-        self.ligand_path = "_ligand.mol2"
+        self.ligand_path = "_ligand.sdf"
 
     def __len__(self):
         return len(self.pdb_id)
@@ -64,17 +64,18 @@ class RPNDataSet:
             input_points, self.voxel_num, self.voxel_size)[:3]
 
         output_data = to_voxel(
-            output_points, self.voxel_num, self.voxel_size)[:3+1]
+            output_points, int(self.voxel_num/2), self.voxel_size*2)[:3+1]
 
         seq_data = output_data.reshape((4, -1))
 
         output_data[3] = np.array([1 if all([seq_data[j][i] == 0 for j in range(3)]) else 0 for i in range(
-            seq_data.shape[1])]).reshape((self.voxel_num, self.voxel_num, self.voxel_num))
+            seq_data.shape[1])]).reshape((int(self.voxel_num/2), int(self.voxel_num/2), int(self.voxel_num/2)))
 
-        input_reg = to_delta_xyz(
-            input_points, self.voxel_num, self.voxel_size)[:3]
+        # input_reg = to_delta_xyz(
+        #     input_points, self.voxel_num, self.voxel_size)[:3]
         output_reg = to_delta_xyz(
             output_points, self.voxel_num, self.voxel_size)[:3]
+        output_reg = torch.FloatTensor(output_reg)
         input_data = torch.FloatTensor(input_data)
         output_data = torch.FloatTensor(output_data)
-        return input_data, input_reg, output_data, output_reg
+        return input_data, output_reg, output_data, output_reg

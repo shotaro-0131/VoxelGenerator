@@ -50,21 +50,21 @@ class ResBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, voxel_size, input_dim=INPUT_DIM):
+    def __init__(self, voxel_size, input_dim=INPUT_DIM, resblocks=[3,3], outputdims=[64, 32], latent_dim=1024):
         super(Encoder, self).__init__()
         self.batch1 = nn.BatchNorm3d(input_dim)
-        self.conv1 = nn.Conv3d(input_dim, 32, 4)
-        self.batch2 = nn.BatchNorm3d(32)
-        self.conv2 = nn.Conv3d(32, 16, 4)
-        self.conv3 = nn.Conv3d(64, 16, 4)
-        self.res1 = ResBlock(32, 6)
-        self.res2 = ResBlock(16, 6)
+        self.conv1 = nn.Conv3d(input_dim, outputdims[0], 4)
+        self.batch2 = nn.BatchNorm3d(outputdims[0])
+        self.conv2 = nn.Conv3d(outputdims[0], outputdims[1], 4)
+        self.conv3 = nn.Conv3d(outputdims[1], 16, 3, stride=1, padding=1)
+        self.res1 = ResBlock(outputdims[0], resblocks[0])
+        self.res2 = ResBlock(outputdims[1], resblocks[1])
         self.pooling = nn.MaxPool3d(3, stride=2)
         self.relu = nn.ReLU()
         dim = 16*int((voxel_size-6)/2-1)**3
         self.fc = nn.Linear(dim, dim)
-        self.enc_var = nn.Linear(dim, dim)
-        self.enc_mean = nn.Linear(dim, dim)
+        self.enc_var = nn.Linear(dim, latent_dim)
+        self.enc_mean = nn.Linear(dim, latent_dim)
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -76,6 +76,7 @@ class Encoder(nn.Module):
         x = self.conv2(x)
         x = self.relu(x)
         x = self.res2(x)
+        x = self.conv3(x)
         x = self.pooling(x)
         x = x.view(batch_size, -1)
         # return x
@@ -85,26 +86,26 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, voxel_size):
+    def __init__(self, voxel_size, output_dim=OUTPUT_DIM, resblocks=[3,3], outputdims=[64, 32], latent_dim=1024):
         super(Decoder, self).__init__()
         self.conv_t0 = nn.ConvTranspose3d(
-            16, 64, 3, stride=2, output_padding=1)
-        self.conv_t1 = nn.ConvTranspose3d(64, 32, 4)
-        self.batch = nn.BatchNorm3d(64)
-        self.conv_t2 = nn.ConvTranspose3d(32, 32, 4)
+            16, outputdims[0], 3, stride=2, output_padding=1)
+        self.conv_t1 = nn.ConvTranspose3d(outputdims[0], outputdims[1], 4)
+        self.batch = nn.BatchNorm3d(outputdims[1])
+        self.conv_t2 = nn.ConvTranspose3d(outputdims[1], output_dim, 4)
         self.relu = nn.ReLU()
-        self.res1 = ResBlock(64, 6)
-        self.res2 = ResBlock(32, 6)
+        self.res1 = ResBlock(outputdims[0], resblocks[0])
+        self.res2 = ResBlock(outputdims[1], resblocks[1])
         dim = 16*int((voxel_size-6)/2-1)**3
         self.voxel_size = int((voxel_size-6)/2-1)
-        self.conv_t3 = nn.Conv3d(32, OUTPUT_DIM, 3, stride=1, padding=1)
-        self.fc = nn.Linear(dim,  dim)
+        # self.conv_t3 = nn.Conv3d(32, OUTPUT_DIM, 3, stride=1, padding=1)
+        self.fc = nn.Linear(latent_dim, dim)
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax()
 
     def forward(self, x):
         batch_size = x.shape[0]
-        # x = self.relu(self.fc(x))
+        x = self.relu(self.fc(x))
         x = x.view(batch_size, 16, self.voxel_size,
                    self.voxel_size, self.voxel_size)
         x = self.conv_t0(x)
@@ -113,10 +114,10 @@ class Decoder(nn.Module):
         x = self.res1(x)
         x = self.conv_t1(x)
         x = self.relu(x)
+        x = self.res2(x)
         x = self.conv_t2(x)
         # x = F.relu(x)
-        x = self.res2(x)
-        x = self.conv_t3(x)
+        # x = self.conv_t3(x)
         x = self.sigmoid(x)
         return x
 
@@ -128,15 +129,14 @@ class VoxelRPN(nn.Module):
         # self.device = "cpu"
         self.voxel_size = voxel_size
         self.enc = Encoder(voxel_size).to(self.device)
-        self.dec = RPN(voxel_size).to(self.device)
+        self.dec = Decoder(voxel_size).to(self.device)
+        self.rpn = RPN(voxel_size).to(self.device)
 
     def forward(self, x):
-        batch_size = x.size(0)
         mean, var = self.enc(x)
         z = self.sampling(mean, var)
-        x = z.view(batch_size, 128, self.voxel_size*2,
-                   self.voxel_size*2, self.voxel_size*2)
-        clf, reg = self.dec(z)
+        x = self.dec(z)
+        clf, reg = self.rpn(x)
         return clf, reg, mean, var
 
     def get_z(self, x):
@@ -150,13 +150,13 @@ class VoxelRPN(nn.Module):
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, voxel_size):
+    def __init__(self, voxel_size, n_layers=[3, 3], n_channel=[32, 32], latent_dim=1024):
         super(AutoEncoder, self).__init__()
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         # self.device = "cpu"
 
-        self.enc = Encoder(voxel_size).to(self.device)
-        self.dec = Decoder(voxel_size).to(self.device)
+        self.enc = Encoder(voxel_size, INPUT_DIM, n_layers, n_channel, latent_dim).to(self.device)
+        self.dec = Decoder(voxel_size, OUTPUT_DIM, n_layers, n_channel, latent_dim).to(self.device)
 
     def forward(self, x):
         mean, var = self.enc(x)

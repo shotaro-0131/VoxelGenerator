@@ -53,6 +53,15 @@ atoms_info = {
     'CL': 5
 }
 
+rev_atoms_info = {
+    0: 'C',
+    1: 'O',
+    2: 'N',
+    3: 'S',
+    4: 'P',
+    5: 'CL'
+}
+
 
 def filter_ligands(ligand):
     if all(a.GetSymbol().upper() in atoms_info for a in ligand.GetAtoms()):
@@ -165,12 +174,14 @@ def get_points(protein_file_path, ligand_file_path, n_cell=20, cell_size=1):
 
 def xyz(array, p, cell_size=1):
     _, X, Y, Z, _ = array.shape
-    i = int((p[0] + X*cell_size/2)/cell_size)
-    j = int((p[1] + Y*cell_size/2)/cell_size)
-    k = int((p[2] + Z*cell_size/2)/cell_size)
+    i = int((p[0] + X*cell_size)/cell_size)
+    j = int((p[1] + Y*cell_size)/cell_size)
+    k = int((p[2] + Z*cell_size)/cell_size)
     atom_index = int(p[3])
-    array[atom_index, i, j, k] = [(p[0] + X*cell_size/2)-i*cell_size,
-                                  (p[1] + Y*cell_size/2)-j*cell_size, (p[2] + Z*cell_size/2)-k*cell_size]
+
+    array[atom_index, int(i/2), int(j/2), int(k/2)] = [(p[0] + X*cell_size)-(2*int(i/2)+1)*cell_size,
+                                  (p[1] + Y*cell_size)-(2*int(j/2)+1)*cell_size, 
+                                  (p[2] + Z*cell_size)-(2*int(k/2)+1)*cell_size]
 
 
 def fill_cell(array, p, cell_size=1):
@@ -199,8 +210,8 @@ def to_voxel(points, n_cell=20, cell_size=1):
 
 
 def to_delta_xyz(points, n_cell=20, cell_size=1):
-    voxel = np.zeros(n_cell**3 * len(atoms_info) * 3, dtype=np.int8)\
-        .reshape([len(atoms_info), n_cell, n_cell, n_cell, 3])
+    voxel = np.zeros(int(n_cell/2)**3 * len(atoms_info) * 3, dtype=np.float)\
+        .reshape([len(atoms_info), int(n_cell/2), int(n_cell/2), int(n_cell/2), 3])
     for point in points:
         xyz(voxel, point, cell_size)
     return voxel
@@ -292,3 +303,17 @@ def rotate(points, phi, theta, psi):
         t.append(atoms[i])
         outputs.append(t)
     return outputs
+
+def to_xyz_file(atoms, filename="test.xyz"):
+    with open(filename, "w") as f:
+        f.write(str(len(atoms))+"\n")
+        for a in atoms:
+            f.write(rev_atoms_info[0]+"\t"+str(atoms[0])+"\t"+str(atoms[1])+"\t"+str(atoms[2]))
+
+def to_xyz(atoms, cell_size=20, n_cell=1):
+    for i in range(int(n_cell/2)):
+        for j in range(int(n_cell/2)):
+            for k in range(int(n_cell/2)):
+                atoms[i,j,k] = atoms[i,j,k]+[cell_size*2*i+cell_size-int(n_cell/2)*cell_size,
+                cell_size*2*j+cell_size-int(n_cell/2)*cell_size,
+                cell_size*2*k+cell_size-int(n_cell/2)*cell_size]

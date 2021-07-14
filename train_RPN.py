@@ -44,7 +44,7 @@ class WrapperModel(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         input_clf, input_reg, target_clf, target_reg = batch
         clf, reg, mean, var = self(input_clf)
-        loss = self.los(reg, clf, target_reg, target_clf)
+        loss = self.loss(reg, clf, target_reg, target_clf)
         self.log("train_loss", loss, on_epoch=True)
         return loss
 
