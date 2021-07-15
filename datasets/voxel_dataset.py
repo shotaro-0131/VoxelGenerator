@@ -3,14 +3,24 @@ import torch
 import os
 import hydra
 import numpy as np
+from omegaconf import DictConfig, OmegaConf
 
 
-class DataSet:
+# @hydra.main(config_path="..", config_name="params.yaml")
+def get_data_dir():
+    # return cfg.data_dir
+    conf = OmegaConf.load(os.path.join(
+        hydra.utils.to_absolute_path(""), "params.yaml"))
+    return conf.dataset.data_dir
+
+
+class DataSet():
     def __init__(self, pdb_id, voxel_size=1, voxel_num=20):
         self.pdb_id = pdb_id
         self.voxel_size = voxel_size
         self.voxel_num = voxel_num
-        self.data_dir = ["D:", "v2019-other-PL"]
+        # self.data_dir = ["D:", "v2019-other-PL"]
+        self.data_dir = get_data_dir()
         # self.data_dir = ["/mnt/d", "v2019-other-PL"]
         self.root = hydra.utils.to_absolute_path("")
         self.protein_path = "_pocket.pdb"
@@ -44,7 +54,8 @@ class RPNDataSet:
         self.pdb_id = pdb_id
         self.voxel_size = voxel_size
         self.voxel_num = voxel_num
-        self.data_dir = ["D:", "v2019-other-PL"]
+        # self.data_dir = ["D:", "v2019-other-PL"]
+        self.data_dir = get_data_dir()
         self.root = hydra.utils.to_absolute_path("")
         self.protein_path = "_pocket.pdb"
         self.ligand_path = "_ligand.sdf"

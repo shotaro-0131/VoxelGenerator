@@ -12,6 +12,7 @@ import os
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 
+
 def print_auto_logged_info(r):
     tags = {k: v for k, v in r.data.tags.items() if not k.startswith("mlflow.")}
     # artifacts = [f.path for f in MlflowClient(
@@ -60,9 +61,9 @@ class WrapperModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.0001)
 
 
-@hydra.main(config_name="params")
+@hydra.main(config_name="params.yaml")
 def main(cfg: DictConfig) -> None:
-    
+
     pl.seed_everything(0)
 
     DIR = os.getcwd()
@@ -74,8 +75,8 @@ def main(cfg: DictConfig) -> None:
         DataSet(data["pdb_id"].values[:100],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
     val_dataloader = DataLoader(
-            DataSet(data["pdb_id"].values[100:110],
-            cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=30)
+        DataSet(data["pdb_id"].values[100:110],
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=30)
 
     def objective(trial: optuna.trial.Trial):
 
@@ -85,17 +86,19 @@ def main(cfg: DictConfig) -> None:
         output_dims = [
             trial.suggest_int("n_channels{}".format(i), 4, 128, log=True) for i in range(3)
         ]
-        latent_dims = trial.suggest_int("latent_dim", 200, 1028, log=True) 
-        model = AutoEncoder(cfg.preprocess.grid_size, list(map(lambda x: x-1, n_layers)), output_dims, latent_dims)
+        latent_dims = trial.suggest_int("latent_dim", 200, 1028, log=True)
+        model = AutoEncoder(cfg.preprocess.grid_size, list(
+            map(lambda x: x-1, n_layers)), output_dims, latent_dims)
         trainer = pl.Trainer(max_epochs=1,
-                            progress_bar_refresh_rate=20,
-                            gpus=cfg.training.gpu_num,
-                            callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss")])
+                             progress_bar_refresh_rate=20,
+                             gpus=cfg.training.gpu_num,
+                             callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss")])
         model = WrapperModel(model, loss)
-        
-        hyperparameters = dict(n_layers=n_layers, latent_dims=latent_dims, output_dims=output_dims)
+
+        hyperparameters = dict(
+            n_layers=n_layers, latent_dims=latent_dims, output_dims=output_dims)
         trainer.logger.log_hyperparams(hyperparameters)
-        
+
         mlflow.pytorch.autolog()
         with mlflow.start_run(experiment_id=2) as run:
             mlflow.set_tags(hyperparameters)
@@ -104,6 +107,7 @@ def main(cfg: DictConfig) -> None:
         # trainer.fit(model, dataloader, val_dataloader)
 
         return trainer.callback_metrics["val_loss"].item()
+
     study = optuna.create_study(direction='minimize')
     study.optimize(objective, n_trials=100)
 
@@ -119,9 +123,5 @@ def main(cfg: DictConfig) -> None:
         print("    {}: {}".format(key, value))
 
 
-    
-    
 if __name__ == "__main__":
     main()
-    
-    
