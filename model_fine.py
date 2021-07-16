@@ -98,25 +98,20 @@ def main(cfg: DictConfig) -> None:
 
     def objective(trial: optuna.trial.Trial):
 
-        block_num = trial.suggest_int("block_num", 1, 4, log=True)
-        kernel_size = trial.suggest_int("block_num", 2, 3, log=True)
+        block_num = trial.suggest_int("block_num", 3, 3, log=True)
+        kernel_size = trial.suggest_int("kernel_size", 3, 3, log=True)
         pool_type = trial.suggest_categorical("pool", ["max", "ave"])
+        pool_kernel_size = trial.suggest_int("pool_kernel_size", 2, 2, log=True)
 
         f_map = [
-            trial.suggest_int("channels", 32, 1024, log=True) for i in range(block_num)
+            trial.suggest_int("channels_{}".format(i), 32, 1024, log=True) for i in range(block_num)
         ]
 
-        n_layers = [
-            trial.suggest_int("resblocks{}".format(i), 1, 7, log=True) for i in range(2)
-        ]
-        output_dims = [
-            trial.suggest_int("n_channels{}".format(i), 4, 128, log=True) for i in range(3)
-        ]
-        latent_dims = trial.suggest_int("latent_dim", 200, 1028, log=True)
+        latent_dim = trial.suggest_int("latent_dim", 200, 1028, log=True)
 
-        hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type,
-                               n_layers=n_layers, latent_dims=latent_dims, output_dims=output_dims, in_channel=3)
-
+        hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type, pool_kernel_size=pool_kernel_size,
+                               latent_dim=latent_dim, in_channel=3)
+        print(hyperparameters)
         model = UNet(AttributeDict(hyperparameters)).to(device)
 
         trainer = pl.Trainer(max_epochs=cfg.training.epoch,

@@ -1,7 +1,7 @@
 dataset:
   train_path: pdb_bind_data.csv
   test_path: pdb_bind_data.csv
-  data_dir: ["/Users/murata", "v2019-other-PL"]
+  data_dir: ["D:", "v2019-other-PL"]
 preprocess:
   grid_size: 20
   cell_size: 1
@@ -13,7 +13,7 @@ optimizer:
   learning_rate: 0.01
 training:
   name: Default
-  gpu_num: 0
+  gpu_num: 1
   batch_size: 30
   epoch: 20
 hydra:
