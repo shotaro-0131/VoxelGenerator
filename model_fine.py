@@ -1,7 +1,7 @@
-from models.ligand_gen import AutoEncoder
+from models.u_net import *
 import hydra
 from omegaconf import DictConfig, omegaconf
-from models.ligand_gen import *
+from models.loss import VAELoss
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 import pytorch_lightning as pl
@@ -13,6 +13,32 @@ import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 
 
+class AttributeDict(object):
+    def __init__(self, obj):
+        self.obj = obj
+
+    def __getstate__(self):
+        return self.obj.items()
+
+    def __setstate__(self, items):
+        if not hasattr(self, 'obj'):
+            self.obj = {}
+        for key, val in items:
+            self.obj[key] = val
+
+    def __getattr__(self, name):
+        if name in self.obj:
+            return self.obj.get(name)
+        else:
+            return None
+
+    def fields(self):
+        return self.obj
+
+    def keys(self):
+        return self.obj.keys()
+
+
 def print_auto_logged_info(r):
     tags = {k: v for k, v in r.data.tags.items() if not k.startswith("mlflow.")}
     # artifacts = [f.path for f in MlflowClient(
@@ -22,14 +48,6 @@ def print_auto_logged_info(r):
     print("params: {}".format(r.data.params))
     print("metrics: {}".format(r.data.metrics))
     print("tags: {}".format(tags))
-
-
-def train(trainer: pl.Trainer, dataloader: DataLoader, val_dataloader: DataLoader, model: pl.LightningModule, tags: dict, experiment_id: int) -> None:
-    mlflow.pytorch.autolog()
-    with mlflow.start_run(experiment_id=experiment_id) as run:
-        mlflow.set_tags(tags)
-        trainer.fit(model, dataloader, val_dataloader)
-    print_auto_logged_info(mlflow.get_run(run_id=run.info.run_id))
 
 
 class WrapperModel(pl.LightningModule):
@@ -65,7 +83,7 @@ class WrapperModel(pl.LightningModule):
 def main(cfg: DictConfig) -> None:
 
     pl.seed_everything(0)
-
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     DIR = os.getcwd()
     MODEL_DIR = os.path.join(DIR, 'result')
     data = pd.read_csv(os.path.join(
@@ -80,6 +98,14 @@ def main(cfg: DictConfig) -> None:
 
     def objective(trial: optuna.trial.Trial):
 
+        block_num = trial.suggest_int("block_num", 1, 4, log=True)
+        kernel_size = trial.suggest_int("block_num", 2, 3, log=True)
+        pool_type = trial.suggest_categorical("pool", ["max", "ave"])
+
+        f_map = [
+            trial.suggest_int("channels", 32, 1024, log=True) for i in range(block_num)
+        ]
+
         n_layers = [
             trial.suggest_int("resblocks{}".format(i), 1, 7, log=True) for i in range(2)
         ]
@@ -87,16 +113,18 @@ def main(cfg: DictConfig) -> None:
             trial.suggest_int("n_channels{}".format(i), 4, 128, log=True) for i in range(3)
         ]
         latent_dims = trial.suggest_int("latent_dim", 200, 1028, log=True)
-        model = AutoEncoder(cfg.preprocess.grid_size, list(
-            map(lambda x: x-1, n_layers)), output_dims, latent_dims)
-        trainer = pl.Trainer(max_epochs=1,
+
+        hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type,
+                               n_layers=n_layers, latent_dims=latent_dims, output_dims=output_dims, in_channel=3)
+
+        model = UNet(AttributeDict(hyperparameters)).to(device)
+
+        trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                              progress_bar_refresh_rate=20,
                              gpus=cfg.training.gpu_num,
                              callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss")])
         model = WrapperModel(model, loss)
 
-        hyperparameters = dict(
-            n_layers=n_layers, latent_dims=latent_dims, output_dims=output_dims)
         trainer.logger.log_hyperparams(hyperparameters)
 
         mlflow.pytorch.autolog()
