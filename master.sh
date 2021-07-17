@@ -1,7 +1,7 @@
 #!/bin/sh
 #$ -cwd
 # 資源タイプF 1ノードを使用
-#$ -l q_node=1
+#$ -l f_node=1
 #$ -l h_rt=0:10:00
 #$ -N grid
 #$ -o out.txt
@@ -17,7 +17,7 @@ module load intel
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 export PATH="$PYENV_ROOT/versions/anaconda3-4.0.0/bin:$PATH"
-
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
@@ -36,4 +36,4 @@ unset __conda_setup
 conda activate py36
 python3 -m pip install --user -r requirements.txt
 
-python train.py
+python model_fine.py training.gpu_num=2

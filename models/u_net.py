@@ -41,7 +41,7 @@ class Block(nn.Module):
             x = self.convs[i](x)
             x = self.batchs[i](x)
             x = self.activ(x)
-        return self.activ(x)
+        return x
 
 
 class Upsample(nn.Module):
@@ -82,7 +82,7 @@ class Encoder(nn.Module):
         x = x.view(x.size(0), -1)
         mean = self.enc_mean(x)
         var = self.enc_var(x)
-        return self.activ(mean), self.activ(var), encoder_features
+        return self.activ(mean), torch.sigmoid(var), encoder_features
 
 
 class Decoder(nn.Module):
@@ -103,12 +103,15 @@ class Decoder(nn.Module):
 
     def forward(self, x, encoder_features):
         x = self.fc(x)
+        x = self.active(x)
         x = x.view(x.size(0), self.params.f_map[-1], self.first_voxel, self.first_voxel, self.first_voxel)
         for i in range(self.params.block_num):
             if i != 0:
                 x = self.upsamplings[i](x)
+                x = self.active(x)
                 x = self.concat(encoder_features[self.params.block_num-i-1], x)
             x = self.blocks[i](x)
+        x = torch.sigmoid(x)
         return x
 
 

@@ -11,7 +11,7 @@ import pandas as pd
 import os
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-
+from joblib import parallel_backend
 
 class AttributeDict(object):
     def __init__(self, obj):
@@ -90,10 +90,10 @@ def main(cfg: DictConfig) -> None:
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     loss = VAELoss()
     dataloader = DataLoader(
-        DataSet(data["pdb_id"].values[:100],
+        DataSet(data["pdb_id"].values[:8000],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
     val_dataloader = DataLoader(
-        DataSet(data["pdb_id"].values[100:110],
+        DataSet(data["pdb_id"].values[8000:9000],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=30)
 
     def objective(trial: optuna.trial.Trial):
@@ -113,10 +113,13 @@ def main(cfg: DictConfig) -> None:
                                latent_dim=latent_dim, in_channel=3)
         print(hyperparameters)
         model = UNet(AttributeDict(hyperparameters)).to(device)
-
+        odel = torch.nn.DataParallel(
+            model) if cfg.training.gpu_num > 1 else model
         trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                              progress_bar_refresh_rate=20,
-                             gpus=cfg.training.gpu_num,
+                             gpus=[i for i in range(cfg.training.gpu_num)],
+                             #plugins='ddp_sharded',
+                             accelerator="ddp",
                              callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss")])
         model = WrapperModel(model, loss)
 
@@ -132,6 +135,7 @@ def main(cfg: DictConfig) -> None:
         return trainer.callback_metrics["val_loss"].item()
 
     study = optuna.create_study(direction='minimize')
+    #with parallel_backend("multiprocessing", n_jobs=cfg.training.gpu_num):
     study.optimize(objective, n_trials=100)
 
     print("Number of finished trials: {}".format(len(study.trials)))
