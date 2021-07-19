@@ -11,7 +11,7 @@ import pandas as pd
 import os
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-from joblib import parallel_backend
+from joblib import parallel_backend, Parallel, delayed
 
 class AttributeDict(object):
     def __init__(self, obj):
@@ -88,7 +88,7 @@ def main(cfg: DictConfig) -> None:
 
     gpu_id=GPU_ID
     pl.seed_everything(0)
-    device = "cuda:{}".format(gpu_id) if torch.cuda.is_available() else "cpu"
+    device = torch.device("cuda:{}".format(gpu_id)) if torch.cuda.is_available() else "cpu"
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     loss = VAELoss(0.1)
@@ -159,11 +159,13 @@ def main(cfg: DictConfig) -> None:
     for key, value in trial.params.items():
         print("    {}: {}".format(key, value))
 
+import time
+from mpi4py import MPI
 
 if __name__ == "__main__":
-    conf = OmegaConf.load(os.path.join(
-            hydra.utils.to_absolute_path(""), "params.yaml"))
-    gpu_ids = [i for i in range(conf.training.gpu_num)]
-    with parallel_backend("multiprocessing", conf.training.gpu_num):
-        GPU_ID=gpu_ids.pop()
-        main()
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    GPU_ID=rank
+    main()
+
