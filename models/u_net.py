@@ -16,7 +16,7 @@ def calc_voxel_size(previous_voxel_size, kernel_size, n, first_layer):
         return calc_voxel_size(previous_voxel_size//2-(kernel_size-3)*2, kernel_size, n-1, False)
 
 class Block(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size, encoder, padding=1):
+    def __init__(self, in_channel, out_channel, kernel_size, drop_out, encoder):
         super(Block, self).__init__()
         self.activ = nn.ReLU()
 
@@ -33,14 +33,17 @@ class Block(nn.Module):
             conv_in_channels.append(conv_out_channels[0])
             conv_out_channels.append(out_channel)
         self.convs = nn.ModuleList(
-            [nn.Conv3d(conv_in_channels[i], conv_out_channels[i], kernel_size, padding=padding) for i in range(2)])
+            [nn.Conv3d(conv_in_channels[i], conv_out_channels[i], kernel_size, padding=1) for i in range(2)])
         self.batchs = nn.ModuleList([nn.BatchNorm3d(conv_out_channels[i]) for i in range(2)])
+        self.drop_out = nn.Dropout(p=drop_out)
 
     def forward(self, x):
         for i in range(2):
             x = self.convs[i](x)
-            x = self.batchs[i](x)
-            x = self.activ(x)
+            if i == 0:
+                x = self.batchs[i](x)
+                x = self.activ(x)
+            x = self.drop_out(x)
         return x
 
 
@@ -64,10 +67,11 @@ class Encoder(nn.Module):
             self.pooling = nn.MaxPool3d(kernel_size=self.params.pool_kernel_size)
         else:
             self.pooling = nn.AvgPool3d(kernel_size=self.params.pool_kernel_size)
-        self.blocks = nn.ModuleList([Block(self.params.f_map[i-1] if i != 0 else self.params.in_channel, self.params.f_map[i], self.params.kernel_size, True)
+        self.blocks = nn.ModuleList([Block(self.params.f_map[i-1] if i != 0 else self.params.in_channel,\
+             self.params.f_map[i], self.params.kernel_size, self.params.drop_out, True)
                        for i in range(self.params.block_num)])
-        self.last_dim = (calc_voxel_size(conf.preprocess.grid_size,
-                                              self.params.kernel_size, self.params.block_num, True))**3*self.params.f_map[-1]
+        self.last_dim = (calc_voxel_size(conf.preprocess.grid_size, self.params.kernel_size, \
+         self.params.block_num, True))**3*self.params.f_map[-1]
         self.enc_mean = nn.Linear(self.last_dim, self.params.latent_dim)
         self.enc_var = nn.Linear(self.last_dim, self.params.latent_dim)
         self.activ = nn.ReLU()
@@ -78,6 +82,7 @@ class Encoder(nn.Module):
             if i != 0:
                 x = self.pooling(x)
             x = self.blocks[i](x)
+            x = self.activ(x)
             encoder_features.append(x)
         x = x.view(x.size(0), -1)
         mean = self.enc_mean(x)
@@ -92,7 +97,8 @@ class Decoder(nn.Module):
             hydra.utils.to_absolute_path(""), "params.yaml"))
         self.params = params if params != None else self.get_default_params()
         self.upsamplings = nn.ModuleList([Upsample(self.params.f_map[self.params.block_num-i-1], self.params.f_map[self.params.block_num-i-1], self.params.pool_kernel_size, self.params.pool_kernel_size) for i in range(self.params.block_num)])
-        self.blocks = nn.ModuleList([Block(self.params.f_map[i]*2 if i != self.params.block_num-1 else self.params.f_map[i], self.params.f_map[i-1] if i != 0 else self.params.in_channel, self.params.kernel_size, False)
+        self.blocks = nn.ModuleList([Block(self.params.f_map[i]*2 if i != self.params.block_num-1 else self.params.f_map[i], \
+            self.params.f_map[i-1] if i != 0 else self.params.in_channel, self.params.kernel_size, self.params.drop_out, False)
                        for i in reversed(range(self.params.block_num))])
         self.concat = partial(self._concat)
         self.first_voxel = calc_voxel_size(conf.preprocess.grid_size,
@@ -111,6 +117,8 @@ class Decoder(nn.Module):
                 x = self.active(x)
                 x = self.concat(encoder_features[self.params.block_num-i-1], x)
             x = self.blocks[i](x)
+            if i != self.params.block_num-1:
+                x = self.active(x)
         x = torch.sigmoid(x)
         return x
 

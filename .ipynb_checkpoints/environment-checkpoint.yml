@@ -1,0 +1,16 @@
+name: test
+channels:
+  - conda-forge
+  - defaults
+  - pytorch
+  - schrodinger
+dependencies:
+  - rdkit
+  - jupyter
+  - torchaudio
+  - torchvision
+  - pytorch
+  - biopython
+  - conda
+  - cudatoolkit=10.2
+  - pymol

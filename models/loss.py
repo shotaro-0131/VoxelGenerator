@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class VAELoss(nn.Module):
-    def __init__(self, alpha=0.1):
+    def __init__(self, alpha=0.01):
         super().__init__()
         self.alpha = alpha
         self.kldiv = nn.KLDivLoss(reduction="sum")
