@@ -1,4 +1,4 @@
-pynb
+*.pynb
 *.jpg
 *.pth
 /output
@@ -6,3 +6,7 @@ __pycache__
 */__pycache__
 *.csv
 params.yaml
+.ipynb_checkpoints
+*.png
+*.db
+.vscode

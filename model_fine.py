@@ -137,14 +137,14 @@ def main(cfg: DictConfig) -> None:
             mlflow.set_tags(hyperparameters)
             trainer.fit(model, dataloader, val_dataloader)
         print_auto_logged_info(mlflow.get_run(run_id=run.info.run_id))
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
 
         return trainer.callback_metrics["val_loss"].item()
 
-    pruner = optuna.pruners.MedianPruner(n_warmup_steps=2)
-    study = optuna.create_study(direction='minimize', load_if_exists=True, pruner=pruner, storage="sqlite:///example.db", study_name="unet")
+    pruner = optuna.pruners.PercentilePruner(50)
+    study = optuna.create_study(direction='minimize', load_if_exists=True, pruner=pruner, storage="sqlite:///unet.db", study_name="unet")
     #with parallel_backend("multiprocessing", n_jobs=cfg.training.gpu_num):
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=200, gc_after_trial=True)
 
     print("Number of finished trials: {}".format(len(study.trials)))
 
