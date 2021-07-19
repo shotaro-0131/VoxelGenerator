@@ -11,7 +11,7 @@ import pandas as pd
 import os
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-# from joblib import parallel_backend
+from joblib import parallel_backend
 
 class AttributeDict(object):
     def __init__(self, obj):
@@ -55,8 +55,8 @@ class WrapperModel(pl.LightningModule):
         super(WrapperModel, self).__init__()
         self.model = model
         self.loss = loss
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = self.model.to(device)
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.model = self.model.to(device)
         self.lr = lr
 
     def forward(self, x):
@@ -82,12 +82,13 @@ class WrapperModel(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
-
+GPU_ID=0
 @hydra.main(config_name="params.yaml")
 def main(cfg: DictConfig) -> None:
 
+    gpu_id=GPU_ID
     pl.seed_everything(0)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda:{}".format(gpu_id) if torch.cuda.is_available() else "cpu"
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     loss = VAELoss(0.1)
@@ -116,7 +117,7 @@ def main(cfg: DictConfig) -> None:
         drop_out = trial.suggest_uniform("drop_out", 0.0, 1.0)
 
         hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type, pool_kernel_size=pool_kernel_size,
-                               latent_dim=latent_dim, in_channel=3, lr=lr, drop_out=drop_out)
+                               latent_dim=latent_dim, in_channel=3, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
 
         print(hyperparameters)
         model = UNet(AttributeDict(hyperparameters)).to(device)
@@ -124,11 +125,11 @@ def main(cfg: DictConfig) -> None:
         #     model) if cfg.training.gpu_num > 1 else model
         trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                              progress_bar_refresh_rate=20,
-                             gpus=[i for i in range(cfg.training.gpu_num)],
+                             gpus=[gpu_id],
                              #plugins='ddp_sharded',
                             #  accelerator="dp",
                              callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss")])
-        model = WrapperModel(model, loss, lr)
+        model = WrapperModel(model, loss, lr).to(device)
 
         trainer.logger.log_hyperparams(hyperparameters)
 
@@ -160,4 +161,9 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    conf = OmegaConf.load(os.path.join(
+            hydra.utils.to_absolute_path(""), "params.yaml"))
+    gpu_ids = [i for i in range(conf.training.gpu_num)]
+    with parallel_backend("multiprocessing", conf.training.gpu_num):
+        GPU_ID=gpu_ids.pop()
+        main()

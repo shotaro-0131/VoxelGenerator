@@ -1,4 +1,4 @@
-*.pynb
+*.ipynb
 *.jpg
 *.pth
 /output
@@ -10,3 +10,4 @@ params.yaml
 *.png
 *.db
 .vscode
+*.sh

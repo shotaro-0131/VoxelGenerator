@@ -16,6 +16,7 @@ training:
   gpu_num: 1
   batch_size: 30
   epoch: 20
+job_id: 0
 hydra:
   run:
     dir: output/

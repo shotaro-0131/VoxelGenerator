@@ -31,9 +31,9 @@ class DataSet():
 
     def __getitem__(self, index):
         protein_path = os.path.join(
-            self.root, *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.protein_path)
+            *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.protein_path)
         ligand_path = os.path.join(
-            self.root, *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.ligand_path)
+            *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.ligand_path)
         input_data, output_data = get_points(
             protein_path, ligand_path, self.voxel_num, self.voxel_size)
         input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)[:3]

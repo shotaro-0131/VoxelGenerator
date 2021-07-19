@@ -18,7 +18,7 @@ export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 export PATH="$PYENV_ROOT/versions/anaconda3-4.0.0/bin:$PATH"
 
-$gpu_num = 4
+gpu_num=4
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
 __conda_setup="$($PYENV_ROOT'/versions/anaconda3-4.0.0/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
@@ -33,9 +33,9 @@ else
 fi
 unset __conda_setup
 # <<< conda initialize <<<
-conda activate py36
-python3 -m pip install --user -r requirements.txt
-
-for i in `seq $gpu_num`
-    export CUDA_VISIBLE_DEVICES=$i
-    python model_fine.py training.gpu_num=1
+# conda activate py36
+# python3 -m pip install --user -r requirements.txt
+mpirun -np 1 -npernode 1 -x PSM2_CUDA=1 -x PSM2_GPUDIRECT=1 -x PATH  python model_fine.py
+# for i in `seq $gpu_num`
+#     export CUDA_VISIBLE_DEVICES=$i
+#     python model_fine.py training.gpu_num=1

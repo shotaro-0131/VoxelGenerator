@@ -134,7 +134,7 @@ class UNet(nn.Module):
         self.params = params if params != None else self.get_default_params()
         self.enc = Encoder(params)
         self.dec = Decoder(params)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda:{}".format(params.gpu_id) if torch.cuda.is_available() else "cpu"
 
 
     def forward(self, x):
