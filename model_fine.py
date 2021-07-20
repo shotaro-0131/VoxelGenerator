@@ -76,6 +76,8 @@ class WrapperModel(pl.LightningModule):
         self.log("val_loss", val_loss, on_epoch=True)
         return {'val_loss': val_loss}
     
+    def _save_model(self, *_):
+        pass 
     # def training_epoch_end(self, training_step_outputs):
     #     torch.save(self.model.state_dict(), "test.pth")
 
@@ -93,11 +95,11 @@ def main(cfg: DictConfig) -> None:
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     loss = VAELoss(0.1)
     dataloader = DataLoader(
-        DataSet(data["pdb_id"].values[:5000],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size, num_workers=8)
+        DataSet(data["pdb_id"].values[:8000],
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, True), batch_size=cfg.training.batch_size, num_workers=4)
     val_dataloader = DataLoader(
-        DataSet(data["pdb_id"].values[10000:10100],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size), batch_size=cfg.training.batch_size)
+        DataSet(data["pdb_id"].values[11000:12000],
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, False), batch_size=cfg.training.batch_size)
 
     def objective(trial: optuna.trial.Trial):
 
@@ -107,10 +109,10 @@ def main(cfg: DictConfig) -> None:
         pool_kernel_size = trial.suggest_int("pool_kernel_size", 2, 2, log=True)
 
         f_map = [
-            trial.suggest_int("channels_{}".format(i), 32, 700, log=True) for i in range(block_num)
+            trial.suggest_int("channels_{}".format(i), 32, 1024, log=True) for i in range(block_num)
         ]
 
-        latent_dim = trial.suggest_int("latent_dim", 200, 1028, log=True)
+        latent_dim = trial.suggest_int("latent_dim", 64, 1024, log=True)
 
         lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
 
@@ -126,26 +128,29 @@ def main(cfg: DictConfig) -> None:
         trainer = pl.Trainer(max_epochs=cfg.training.epoch,
                              progress_bar_refresh_rate=20,
                              gpus=[gpu_id],
+                             logger=False,
+                             checkpoint_callback=False,
                              #plugins='ddp_sharded',
                             #  accelerator="dp",
                              callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss")])
         model = WrapperModel(model, loss, lr).to(device)
 
-        trainer.logger.log_hyperparams(hyperparameters)
+ #      trainer.logger.log_hyperparams(hyperparameters)
 
         mlflow.pytorch.autolog(log_models=False)
         with mlflow.start_run(experiment_id=2) as run:
             mlflow.set_tags(hyperparameters)
             trainer.fit(model, dataloader, val_dataloader)
-        print_auto_logged_info(mlflow.get_run(run_id=run.info.run_id))
+ #       print_auto_logged_info(mlflow.get_run(run_id=run.info.run_id))
         # torch.cuda.empty_cache()
 
         return trainer.callback_metrics["val_loss"].item()
 
-    pruner = optuna.pruners.PercentilePruner(50)
+    #pruner = optuna.pruners.PercentilePruner(60)
+    pruner = optuna.pruners.MedianPruner(n_warmup_steps=cfg.training.epoch//2, n_startup_trials=10)
     study = optuna.create_study(direction='minimize', load_if_exists=True, pruner=pruner, storage="sqlite:///unet.db", study_name="unet")
     #with parallel_backend("multiprocessing", n_jobs=cfg.training.gpu_num):
-    study.optimize(objective, n_trials=200, gc_after_trial=True)
+    study.optimize(objective, timeout=8*60*55, gc_after_trial=True)
 
     print("Number of finished trials: {}".format(len(study.trials)))
 
@@ -167,5 +172,6 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     GPU_ID=rank
+    time.sleep(rank)
     main()
 

@@ -35,7 +35,7 @@ class Block(nn.Module):
         self.convs = nn.ModuleList(
             [nn.Conv3d(conv_in_channels[i], conv_out_channels[i], kernel_size, padding=1) for i in range(2)])
         self.batchs = nn.ModuleList([nn.BatchNorm3d(conv_out_channels[i]) for i in range(2)])
-        self.drop_out = nn.Dropout(p=drop_out)
+        #self.drop_out = nn.Dropout(p=drop_out)
 
     def forward(self, x):
         for i in range(2):
@@ -43,7 +43,7 @@ class Block(nn.Module):
             if i == 0:
                 x = self.batchs[i](x)
                 x = self.activ(x)
-            x = self.drop_out(x)
+            # x = self.drop_out(x)
         return x
 
 
