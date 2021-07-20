@@ -1,7 +1,7 @@
 from models.u_net import *
 import hydra
 from omegaconf import DictConfig, omegaconf
-from models.loss import VAELoss
+from models.loss import *
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 import pytorch_lightning as pl
@@ -64,22 +64,22 @@ class WrapperModel(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         x, y = batch
-        p, mean, var = self(x)
-        loss = self.loss(p, y, mean, var)
+        p = self(x)
+        loss = self.loss(p, y)
         self.log("train_loss", loss, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch
-        p, mean, var = self.forward(x)
-        val_loss = self.loss(p, y, mean, var)
+        p = self.forward(x)
+        val_loss = self.loss(p, y)
         self.log("val_loss", val_loss, on_epoch=True)
         return {'val_loss': val_loss}
     
     def _save_model(self, *_):
         pass 
-    # def training_epoch_end(self, training_step_outputs):
-    #     torch.save(self.model.state_dict(), "test.pth")
+    def training_epoch_end(self, training_step_outputs):
+        torch.save(self.model.state_dict(), "test.pth")
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -93,18 +93,18 @@ def main(cfg: DictConfig) -> None:
     device = torch.device("cuda:{}".format(gpu_id)) if torch.cuda.is_available() else "cpu"
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
-    loss = VAELoss(0.1)
+    loss = Loss()
     dataloader = DataLoader(
         DataSet(data["pdb_id"].values[:8000],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, True), batch_size=cfg.training.batch_size, num_workers=4)
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size, False, True), batch_size=cfg.training.batch_size, num_workers=4)
     val_dataloader = DataLoader(
         DataSet(data["pdb_id"].values[11000:12000],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, False), batch_size=cfg.training.batch_size)
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size, False, False), batch_size=cfg.training.batch_size)
 
     def objective(trial: optuna.trial.Trial):
 
         block_num = trial.suggest_int("block_num", 3, 3, log=True)
-        kernel_size = trial.suggest_int("kernel_size", 3, 3, log=True)
+        kernel_size = trial.suggest_int("kernel_size", 3, 7, step=2, log=True)
         pool_type = trial.suggest_categorical("pool", ["max", "ave"])
         pool_kernel_size = trial.suggest_int("pool_kernel_size", 2, 2, log=True)
 
@@ -165,13 +165,13 @@ def main(cfg: DictConfig) -> None:
         print("    {}: {}".format(key, value))
 
 import time
-from mpi4py import MPI
+# from mpi4py import MPI
 
 if __name__ == "__main__":
 
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    GPU_ID=rank
-    time.sleep(rank)
+    # comm = MPI.COMM_WORLD
+    # rank = comm.Get_rank()
+    # GPU_ID=rank
+    # time.sleep(rank)
     main()
 

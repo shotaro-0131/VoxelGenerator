@@ -15,33 +15,45 @@ import warnings
 import cmd
 import pymol
 GRID_LENGTH = 20
-
+import random
+import scipy
+import scipy.ndimage
 
 def random_rotation_3d(batch, max_angle):
-    size = batch.shape
-    batch = np.squeeze(batch)
-    batch_rot = np.zeros(batch.shape)
-    for i in range(batch.shape[0]):
+    size = batch[0].shape
+    batch_1, batch_2 = batch
+    batch_1 = np.squeeze(batch_1)
+    batch_2 = np.squeeze(batch_2)
+    batch_rot_1 = np.zeros(batch_1.shape)
+    batch_rot_2 = np.zeros(batch_2.shape)
+    for i in range(batch_1.shape[0]):
         if bool(random.getrandbits(1)):
-            image1 = np.squeeze(batch[i])
+            image1_1 = np.squeeze(batch_1[i])
+            image1_2 = np.squeeze(batch_2[i])
             # rotate along z-axis
             angle = random.uniform(-max_angle, max_angle)
-            image2 = scipy.ndimage.interpolation.rotate(
-                image1, angle, mode='nearest', axes=(0, 1), reshape=False)
+            image2_1 = scipy.ndimage.interpolation.rotate(
+                image1_1, angle, mode='nearest', axes=(0, 1), reshape=False)
+            image2_2 = scipy.ndimage.interpolation.rotate(
+                image1_2, angle, mode='nearest', axes=(0, 1), reshape=False)
 
             # rotate along y-axis
             angle = random.uniform(-max_angle, max_angle)
-            image3 = scipy.ndimage.interpolation.rotate(
-                image2, angle, mode='nearest', axes=(0, 2), reshape=False)
-
+            image3_1 = scipy.ndimage.interpolation.rotate(
+                image2_1, angle, mode='nearest', axes=(0, 2), reshape=False)
+            image3_2 = scipy.ndimage.interpolation.rotate(
+                image2_2, angle, mode='nearest', axes=(0, 2), reshape=False)
             # rotate along x-axis
             angle = random.uniform(-max_angle, max_angle)
-            batch_rot[i] = scipy.ndimage.interpolation.rotate(
-                image3, angle, mode='nearest', axes=(1, 2), reshape=False)
+            batch_rot_1[i] = scipy.ndimage.interpolation.rotate(
+                image3_1, angle, mode='nearest', axes=(1, 2), reshape=False)
+            batch_rot_2[i] = scipy.ndimage.interpolation.rotate(
+                image3_2, angle, mode='nearest', axes=(1, 2), reshape=False)
 
         else:
-            batch_rot[i] = batch[i]
-    return batch_rot.reshape(size)
+            batch_rot_1[i] = batch_1[i]
+            batch_rot_2[i] = batch_2[i]
+    return batch_rot_1.reshape(size), batch_rot_2.reshape(size)
 
 
 atoms_info = {
@@ -217,19 +229,19 @@ def to_delta_xyz(points, n_cell=20, cell_size=1):
     return voxel
 
 
-def process_grid(array, grid_size=20, hreshold=0.2):
+def process_grid(array, grid_size=20, hreshold=[0.2, 0.2, 0.2]):
     new_array = np.zeros((6, grid_size, grid_size, grid_size), dtype=bool)
     for i in range(3):
         for x in range(grid_size):
             for y in range(grid_size):
                 for z in range(grid_size):
                     new_array[i, x, y, z] = True if array[i,
-                                                          x, y, z] > hreshold else False
+                                                          x, y, z] > hreshold[i] else False
     return new_array
 
 
 # %matplotlib inline
-def savegrid(d, filename, grid_size=20, hreshold=0.2):
+def savegrid(d, filename, grid_size=20, hreshold=[0.2, 0.2, 0.2]):
     # prepare some coordinates
     d = process_grid(d, grid_size, hreshold=hreshold)
     x, y, z = np.indices((grid_size, grid_size, grid_size))

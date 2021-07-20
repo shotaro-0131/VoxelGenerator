@@ -33,7 +33,7 @@ class Block(nn.Module):
             conv_in_channels.append(conv_out_channels[0])
             conv_out_channels.append(out_channel)
         self.convs = nn.ModuleList(
-            [nn.Conv3d(conv_in_channels[i], conv_out_channels[i], kernel_size, padding=1) for i in range(2)])
+            [nn.Conv3d(conv_in_channels[i], conv_out_channels[i], kernel_size, padding=(kernel_size-1)//2) for i in range(2)])
         self.batchs = nn.ModuleList([nn.BatchNorm3d(conv_out_channels[i]) for i in range(2)])
         #self.drop_out = nn.Dropout(p=drop_out)
 
@@ -70,10 +70,12 @@ class Encoder(nn.Module):
         self.blocks = nn.ModuleList([Block(self.params.f_map[i-1] if i != 0 else self.params.in_channel,\
              self.params.f_map[i], self.params.kernel_size, self.params.drop_out, True)
                        for i in range(self.params.block_num)])
-        self.last_dim = (calc_voxel_size(conf.preprocess.grid_size, self.params.kernel_size, \
-         self.params.block_num, True))**3*self.params.f_map[-1]
-        self.enc_mean = nn.Linear(self.last_dim, self.params.latent_dim)
-        self.enc_var = nn.Linear(self.last_dim, self.params.latent_dim)
+        # self.last_dim = (calc_voxel_size(conf.preprocess.grid_size, self.params.kernel_size, \
+        #  self.params.block_num, True))**3*self.params.f_map[-1]
+        # print(calc_voxel_size(conf.preprocess.grid_size, self.params.kernel_size, \
+        #  self.params.block_num, True))
+        # self.enc_mean = nn.Linear(self.last_dim, self.params.latent_dim)
+        # self.enc_var = nn.Linear(self.last_dim, self.params.latent_dim)
         self.activ = nn.ReLU()
 
     def forward(self, x):
@@ -85,9 +87,9 @@ class Encoder(nn.Module):
             x = self.activ(x)
             encoder_features.append(x)
         x = x.view(x.size(0), -1)
-        mean = self.enc_mean(x)
-        var = self.enc_var(x)
-        return self.activ(mean), torch.sigmoid(var), encoder_features
+        # mean = self.enc_mean(x)
+        # var = self.enc_var(x)
+        return x, encoder_features
 
 
 class Decoder(nn.Module):
@@ -104,18 +106,19 @@ class Decoder(nn.Module):
         self.first_voxel = calc_voxel_size(conf.preprocess.grid_size,
                                                self.params.kernel_size, self.params.block_num, True)
         self.first_dim = (self.first_voxel)**3*self.params.f_map[-1]
-        self.fc = nn.Linear(self.params.latent_dim, self.first_dim)
+        # self.fc = nn.Linear(self.params.latent_dim, self.first_dim)
+        self.drop_out = nn.Dropout(p=params.drop_out)
         self.active = nn.ReLU()
 
     def forward(self, x, encoder_features):
-        x = self.fc(x)
-        x = self.active(x)
+        # x = self.fc(x)
+        # x = self.active(x)
         x = x.view(x.size(0), self.params.f_map[-1], self.first_voxel, self.first_voxel, self.first_voxel)
         for i in range(self.params.block_num):
             if i != 0:
                 x = self.upsamplings[i](x)
                 x = self.active(x)
-                x = self.concat(encoder_features[self.params.block_num-i-1], x)
+                x = self.concat(self.drop_out(encoder_features[self.params.block_num-i-1]), x)
             x = self.blocks[i](x)
             if i != self.params.block_num-1:
                 x = self.active(x)
@@ -134,15 +137,18 @@ class UNet(nn.Module):
         self.params = params if params != None else self.get_default_params()
         self.enc = Encoder(params)
         self.dec = Decoder(params)
-        self.device = torch.device("cuda:{}".format(params.gpu_id)) if torch.cuda.is_available() else "cpu"
-
+        if params.gpu_id != None:
+            self.device = torch.device("cuda:{}".format(params.gpu_id)) if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def forward(self, x):
-        mean, var, encoder_features = self.enc(x)
-        z = self.sampling(mean, var)
+        # mean, var, encoder_features = self.enc(x)
+        z, encoder_features = self.enc(x)
+        # z = self.sampling(mean, var)
         x = self.dec(z, encoder_features)
-        return x, mean, var
+        return x
 
-    def sampling(self, mean, var):
-        epsilon = torch.randn(mean.shape).to(self.device)
-        return mean + torch.sqrt(var) * epsilon
+    # def sampling(self, mean, var):
+        # epsilon = torch.randn(mean.shape).to(self.device)
+        # return mean + torch.sqrt(var) * epsilon
