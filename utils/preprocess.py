@@ -202,6 +202,9 @@ def fill_cell(array, p, cell_size=1):
     j = int((p[1] + Y*cell_size/2)/cell_size)
     k = int((p[2] + Z*cell_size/2)/cell_size)
     atom_index = int(p[3])
+    if array[atom_index, i, j, k] != 0:
+        print("a")
+
     for c in range(8):
         ii, jj, kk = 0, 0, 0
         if c >> 0 & 1 == 1 and i != X-1:
@@ -319,9 +322,9 @@ def rotate(points, phi, theta, psi):
 
 def to_xyz_file(atoms, filename="test.xyz"):
     with open(filename, "w") as f:
-        f.write(str(len(atoms))+"\n")
+        f.write(str(len(atoms))+"\n\n")
         for a in atoms:
-            f.write(rev_atoms_info[0]+"\t"+str(atoms[0])+"\t"+str(atoms[1])+"\t"+str(atoms[2]))
+            f.write(rev_atoms_info[a[3]]+"\t"+str(a[0])+"\t"+str(a[1])+"\t"+str(a[2])+"\n")
 
 def to_xyz(atoms, cell_size=20, n_cell=1):
     for i in range(int(n_cell/2)):
@@ -330,3 +333,21 @@ def to_xyz(atoms, cell_size=20, n_cell=1):
                 atoms[i,j,k] = atoms[i,j,k]+[cell_size*2*i+cell_size-int(n_cell/2)*cell_size,
                 cell_size*2*j+cell_size-int(n_cell/2)*cell_size,
                 cell_size*2*k+cell_size-int(n_cell/2)*cell_size]
+
+def gather(voxel):
+    new_voxel = np.zeros(voxel.shape)
+    d = [0, 1]
+    for i in range(3):
+        for x in range(voxel.shape[0]-1):
+            for y in range(voxel.shape[1]-1):
+                for z in range(voxel.shape[2]-1):
+                    for c in range(8):
+                        dx, dy, dz = 0, 0, 0
+                        if c >> 0 & 1 == 1:
+                            dx = 1
+                        if c >> 1 & 1 == 1:
+                            dy = 1
+                        if c >> 2 & 1 == 1:
+                            dz = 1
+                        new_voxel[i, x, y, z] += voxel[i, x+dx, y+dy, z+dz]
+    return new_voxel
