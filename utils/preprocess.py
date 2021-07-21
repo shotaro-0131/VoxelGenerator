@@ -229,21 +229,21 @@ def to_delta_xyz(points, n_cell=20, cell_size=1):
     return voxel
 
 
-def process_grid(array, grid_size=20, hreshold=[0.2, 0.2, 0.2]):
+def process_grid(array, grid_size=20, threshold=[0.2, 0.2, 0.2]):
     new_array = np.zeros((6, grid_size, grid_size, grid_size), dtype=bool)
     for i in range(3):
         for x in range(grid_size):
             for y in range(grid_size):
                 for z in range(grid_size):
                     new_array[i, x, y, z] = True if array[i,
-                                                          x, y, z] > hreshold[i] else False
+                                                          x, y, z] > threshold[i] else False
     return new_array
 
 
 # %matplotlib inline
-def savegrid(d, filename, grid_size=20, hreshold=[0.2, 0.2, 0.2]):
+def savegrid(d, filename, grid_size=20, threshold=[0.2, 0.2, 0.2]):
     # prepare some coordinates
-    d = process_grid(d, grid_size, hreshold=hreshold)
+    d = process_grid(d, grid_size, threshold=threshold)
     x, y, z = np.indices((grid_size, grid_size, grid_size))
 
     # combine the objects into a single boolean array
@@ -264,28 +264,29 @@ def savegrid(d, filename, grid_size=20, hreshold=[0.2, 0.2, 0.2]):
     ax.voxels(voxels, facecolors=colors, edgecolor='k')
     plt.savefig(filename, dpi=140)
 
+def get_threshold(true_grid, target_grid):
+    threshold=[0.5, 0.5, 0.5]
+    max_score = 0
+    for i in range(3):
+        for j in range(20):
+            new_threshold = []
+            new_threshold[:] = threshold
+            new_threshold[i] = j * 0.5/20
+            target = [process_grid(target_grid[k], grid_size=20, threshold=new_threshold).reshape(3, -1) for k in range(len(target_grid))] 
+        
+            target_ = np.array([1 if target[n][l, k] else 0 for k in range(20*20*20) for l in range(3) for n in range(len(target_grid))]).reshape(len(target_grid), 3, -1)
+            if max_score < score_grid(true_grid, target_):
+                max_score = score_grid(true_grid, target_)
+                threshold = new_threshold
+            
+    return new_threshold
+from sklearn.metrics import average_precision_score
 
-def score_grid(true_points, target_grid, is_rotation=True):
-    for i in range(target_grid.shape[0]):
-        if bool(random.getrandbits(1)):
-            image1 = np.squeeze(batch[i])
-            # rotate along z-axis
-            angle = random.uniform(-max_angle, max_angle)
-            image2 = scipy.ndimage.interpolation.rotate(
-                image1, angle, mode='nearest', axes=(0, 1), reshape=False)
-
-            # rotate along y-axis
-            angle = random.uniform(-max_angle, max_angle)
-            image3 = scipy.ndimage.interpolation.rotate(
-                image2, angle, mode='nearest', axes=(0, 2), reshape=False)
-
-            # rotate along x-axis
-            angle = random.uniform(-max_angle, max_angle)
-            batch_rot[i] = scipy.ndimage.interpolation.rotate(
-                image3, angle, mode='nearest', axes=(1, 2), reshape=False)
-
-        else:
-            batch_rot[i] = batch[i]
+def score_grid(true_grid, target_grid, is_rotation=False):
+    score = 0
+    for i in range(3):
+        score += average_precision_score(true_grid[:,i].reshape(true_grid.shape[0], -1)[:,10],target_grid[:,i].reshape(len(true_grid), -1)[,:10])
+    return score / 3
 
 
 def Rx(theta):
