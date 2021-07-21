@@ -285,7 +285,7 @@ from sklearn.metrics import average_precision_score
 def score_grid(true_grid, target_grid, is_rotation=False):
     score = 0
     for i in range(3):
-        score += average_precision_score(true_grid[:,i].reshape(true_grid.shape[0], -1)[:,10],target_grid[:,i].reshape(len(true_grid), -1)[,:10])
+        score += average_precision_score(true_grid[:,i].reshape(true_grid.shape[0], -1)[:,:10],target_grid[:,i].reshape(len(true_grid), -1)[:,:10])
     return score / 3
 
 
