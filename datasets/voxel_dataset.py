@@ -55,6 +55,9 @@ class DataSet():
         # output_data = output_data[1:]
         if self.train:
             input_data, output_data = random_rotation_3d([input_data, output_data], 30)
+            input_data, output_data = random_shift_3d([input_data, output_data], 0.3)
+        # input_data = filtering(input_data)
+        # output_data = filtering(output_data)
         input_data = torch.FloatTensor(input_data)
         output_data = torch.FloatTensor(output_data)
         return input_data, output_data

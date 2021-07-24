@@ -22,6 +22,6 @@ class Loss(nn.Module):
         super().__init__()
 
     def forward(self, outputs, targets):
-        reconstruction_loss = F.binary_cross_entropy(outputs, targets)
+        reconstruction_loss = F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), targets.view(outputs.shape[0], -1))
 
         return reconstruction_loss 
