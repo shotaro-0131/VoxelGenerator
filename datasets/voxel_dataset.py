@@ -28,11 +28,12 @@ class DataSet():
         self.ligand_path = "_ligand.sdf"
         self.train = is_train
         if is_numpy:
-          self.data = np.load("/gs/hs0/tga-science/murata/pdb_2019.npy")
+          self.data = np.load("/gs/hs0/tga-science/murata/v2019-points.npy")
           if is_train:
-            self.data = self.data[:8000]
+            self.data = self.data[:11000]
           else:
             self.data = self.data[11000:12000]
+          
     def __len__(self):
         return len(self.pdb_id)
 
@@ -40,7 +41,13 @@ class DataSet():
         if self.is_numpy:
           input_data = self.data[index,0]
           output_data = self.data[index,1]
-          
+          input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)[:3]
+          around_data = to_voxel(
+              output_data, self.voxel_num, self.voxel_size, True)[:3]
+          output_data = to_voxel(
+              output_data, self.voxel_num, self.voxel_size)[:3]  
+        if self.train:
+            around_data = torch.FloatTensor(around_data)  
         else:
           protein_path = os.path.join(
               *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.protein_path)
@@ -49,19 +56,24 @@ class DataSet():
           input_data, output_data = get_points(
               protein_path, ligand_path, self.voxel_num, self.voxel_size)
           input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)[:3]
+          around_data = to_voxel(
+              output_data, self.voxel_num, self.voxel_size, True)[:3]
           output_data = to_voxel(
               output_data, self.voxel_num, self.voxel_size)[:3]
         # input_data = np.concatenate([input_data, output_data], axis=0)[1:4]
         # output_data = output_data[1:]
         if self.train:
-            input_data, output_data = random_rotation_3d([input_data, output_data], 30)
-            input_data, output_data = random_shift_3d([input_data, output_data], 0.3)
+            input_data, output_data, around_data = random_rotation_3d([input_data, output_data, around_data], 30)
+            input_data, output_data, around_data = random_shift_3d([input_data, output_data, around_data], 0.3)
+            around_data = torch.FloatTensor(around_data)
+
         # input_data = filtering(input_data)
         # output_data = filtering(output_data)
         input_data = torch.FloatTensor(input_data)
         output_data = torch.FloatTensor(output_data)
+        if self.train:
+            return input_data, output_data, around_data
         return input_data, output_data
-
 
 
 
