@@ -21,50 +21,32 @@ import scipy.ndimage
 from scipy.ndimage.interpolation import shift
 def random_rotation_3d(batch, max_angle):
     size = batch[0].shape
-    batch_1, batch_2 = batch
-    batch_1 = np.squeeze(batch_1)
-    batch_2 = np.squeeze(batch_2)
-    batch_rot_1 = np.zeros(batch_1.shape)
-    batch_rot_2 = np.zeros(batch_2.shape)
+    new_batch = [np.zeros(size) for i in range(len(batch))]
     angles = [random.uniform(-max_angle, max_angle) for i in range(3)]
+    for j in range(len(batch)):
+        for i in range(size[0]):
+            image1 = batch[j][i]
+                # rotate along z-axis
+            image2 = scipy.ndimage.interpolation.rotate(
+                image1, angles[0], mode='nearest', axes=(0, 1), reshape=False)
 
-    for i in range(batch_1.shape[0]):
-        # if bool(random.getrandbits(1)):
-            image1_1 = np.squeeze(batch_1[i])
-            image1_2 = np.squeeze(batch_2[i])
-            # rotate along z-axis
-            image2_1 = scipy.ndimage.interpolation.rotate(
-                image1_1, angles[0], mode='nearest', axes=(0, 1), reshape=False)
-            image2_2 = scipy.ndimage.interpolation.rotate(
-                image1_2, angles[0], mode='nearest', axes=(0, 1), reshape=False)
+                # rotate along y-axis
+            image3 = scipy.ndimage.interpolation.rotate(
+                image2, angles[1], mode='nearest', axes=(0, 2), reshape=False)
+                # rotate along x-axis
+            new_batch[j][i] = scipy.ndimage.interpolation.rotate(
+                image3, angles[2], mode='nearest', axes=(1, 2), reshape=False)
 
-            # rotate along y-axis
-            image3_1 = scipy.ndimage.interpolation.rotate(
-                image2_1, angles[1], mode='nearest', axes=(0, 2), reshape=False)
-            image3_2 = scipy.ndimage.interpolation.rotate(
-                image2_2, angles[1], mode='nearest', axes=(0, 2), reshape=False)
-            # rotate along x-axis
-            angle = random.uniform(-max_angle, max_angle)
-            batch_rot_1[i] = scipy.ndimage.interpolation.rotate(
-                image3_1, angles[2], mode='nearest', axes=(1, 2), reshape=False)
-            batch_rot_2[i] = scipy.ndimage.interpolation.rotate(
-                image3_2, angles[2], mode='nearest', axes=(1, 2), reshape=False)
-
-        # else:
-        #     batch_rot_1[i] = batch_1[i]
-        #     batch_rot_2[i] = batch_2[i]
-    return batch_rot_1.reshape(size), batch_rot_2.reshape(size)
+    return new_batch
 
 def random_shift_3d(batch, max_shift):
     size = batch[0].shape
-    batch_1, batch_2 = batch
     shifts = [random.uniform(-max_shift, max_shift) for i in range(3)]
-    batch_shift_1 = np.zeros(batch_1.shape)
-    batch_shift_2 = np.zeros(batch_2.shape)
-    for i in range(batch_1.shape[0]):
-        batch_shift_1[i] = shift(batch_1[i], shifts, cval=0)
-        batch_shift_2[i] = shift(batch_2[i], shifts, cval=0)
-    return batch_shift_1.reshape(size), batch_shift_2.reshape(size)
+    new_batch = [np.zeros(size) for i in range(len(batch))]
+    for j in range(len(batch)):
+        for i in range(size[0]):
+            new_batch[j][i] = shift(batch[j][i], shifts, cval=0)
+    return new_batch
 
 
 atoms_info = {
@@ -207,14 +189,30 @@ def xyz(array, p, cell_size=1):
                                   (p[2] + Z*cell_size)-(2*int(k/2)+1)*cell_size]
 
 
-def fill_cell(array, p, cell_size=1):
+def fill_cell(array, p, cell_size=1, around=False):
     _, X, Y, Z = array.shape
     i = int((p[0] + X*cell_size/2)/cell_size)
     j = int((p[1] + Y*cell_size/2)/cell_size)
     k = int((p[2] + Z*cell_size/2)/cell_size)
     atom_index = int(p[3])
+    if not around:
+        array[atom_index, i, j, k] = 1
+    else:
+        for dx, dy, dz in itertools.product([-1,0,1], repeat=3):
+            if dx+i >= 0 and dx+i < 20:
+                x = dx+i
+            else:
+                x = i
+            if dy+j >= 0 and dy+j < 20:
+                y = dy+j
+            else:
+                y = j
+            if dz+k >= 0 and dz+k < 20:
+                z = dz+k
+            else:
+                z = k
+            array[atom_index, x, y, z]=1
 
-    array[atom_index, i, j, k] = 1
     
 from scipy import signal
 def filtering(voxel):
@@ -250,11 +248,11 @@ def recovery(voxel):
         new_voxel[i] = signal.convolve(voxel[i], kernel, mode="same")
     return new_voxel
 
-def to_voxel(points, n_cell=20, cell_size=1):
+def to_voxel(points, n_cell=20, cell_size=1, around=False):
     voxel = np.zeros(n_cell**3 * len(atoms_info), dtype=np.int8)\
         .reshape([len(atoms_info), n_cell, n_cell, n_cell])
     for point in points:
-        fill_cell(voxel, point, cell_size)
+        fill_cell(voxel, point, cell_size, around)
     return voxel
 
 
@@ -372,14 +370,16 @@ import itertools
 def gather(voxel):
     new_voxel = np.zeros(voxel.shape)
     for i in range(3):
-        for x in range(voxel.shape[1]-1):
-            for y in range(voxel.shape[2]-1):
-                for z in range(voxel.shape[3]-1):
-                    s = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-1,0,1], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0]
-                    s.sort(reverse=True)
-                    if voxel[i, x, y, z] >= s[2] and i == 0:
+        for x in range(voxel.shape[1]-2):
+            for y in range(voxel.shape[2]-2):
+                for z in range(voxel.shape[3]-2):
+                    s2 = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-2,-1,0,1,2], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0 and x+dx>=0 and y+dy>=0 and z+dz>=0]
+                    s2.sort(reverse=True)
+                    s1 = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-1,0,1], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0]
+                    s1.sort(reverse=True)
+                    if voxel[i, x, y, z] > s1[2] and i == 0:
                         new_voxel[i, x, y, z] = voxel[i, x, y, z]
-                    if voxel[i, x, y, z] >= s[0] and i != 0:
+                    if voxel[i, x, y, z] > s2[0] and i != 0:
                         new_voxel[i, x, y, z] = voxel[i, x, y, z]
     return new_voxel
 

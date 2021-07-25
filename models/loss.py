@@ -25,3 +25,13 @@ class Loss(nn.Module):
         reconstruction_loss = F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), targets.view(outputs.shape[0], -1))
 
         return reconstruction_loss 
+
+class VoxelLoss(nn.Module):
+    def __init__(self, alpha=0.25):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, outputs, targets, around):
+        reconstruction_loss = (1-self.alpha)*F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), targets.view(outputs.shape[0], -1))
+        reconstruction_loss += self.alpha*F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), around.view(outputs.shape[0], -1))
+        return reconstruction_loss
