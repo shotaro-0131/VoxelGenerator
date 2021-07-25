@@ -48,6 +48,7 @@ class DataSet():
               output_data, self.voxel_num, self.voxel_size)[:3]  
         if self.train:
             around_data = torch.FloatTensor(around_data)  
+          
         else:
           protein_path = os.path.join(
               *self.data_dir, self.pdb_id[index], self.pdb_id[index]+self.protein_path)
