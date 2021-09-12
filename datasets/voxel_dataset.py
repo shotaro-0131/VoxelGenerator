@@ -27,6 +27,7 @@ class DataSet():
         self.protein_path = "_pocket.pdb"
         self.ligand_path = "_ligand.sdf"
         self.train = is_train
+
         # if is_numpy:
         #   if is_train:
         #     self.data = np.stack([np.load(os.path.join(*self.data_dir).replace("v2020_PL_all", f"v2020-points/v2020-points-{i}.npy"), allow_pickle=True) for i in range(8)])
@@ -35,6 +36,7 @@ class DataSet():
         #     print(os.path.join(*self.data_dir).replace("v2020_PL_all", "v2020-points/v2020-points-0.npy"))
         #     self.data = np.load(os.path.join(*self.data_dir).replace("v2020_PL_all", "v2020-points/v2020-points-8.npy"), allow_pickle=True)
             # self.data = self.data[11000:12000]
+
           
     def __len__(self):
         return len(self.pdb_id)
@@ -53,6 +55,7 @@ class DataSet():
               output_data, self.voxel_num, self.voxel_size, True)[:4]
           output_data = to_voxel(
               output_data, self.voxel_num, self.voxel_size)[:4]
+
           
         else:
           protein_path = os.path.join(
@@ -83,7 +86,6 @@ class DataSet():
         if self.train:
             return input_data, around_data, output_data
         return input_data, output_data
-
 
 
 
