@@ -55,7 +55,8 @@ atoms_info = {
     'N': 2,
     'S': 3,
     'P': 4,
-    'CL': 5
+    'Cl': 5,
+    'H': 6 
 }
 
 rev_atoms_info = {
@@ -64,7 +65,8 @@ rev_atoms_info = {
     2: 'N',
     3: 'S',
     4: 'P',
-    5: 'CL'
+    5: 'Cl',
+    6: 'H'
 }
 
 
@@ -78,12 +80,16 @@ def filter_mol_atoms(mol):
     for a in mol:
         if a.GetSymbol() in atoms_info:
             yield a
+        else:
+            print(a.GetSymbol())
 
 
 def filter_atoms(atoms):
     for a in atoms:
         if a[3] in atoms_info:
             yield a
+        else:
+            print(a[3])
     # raise StopIteration
 
 
@@ -118,8 +124,8 @@ def centering(structure, center, square_length=20):
     for a in filter_atoms(structure):
         x, y, z, atom = a
         p = [x, y, z] - center
-        if all((np.abs(p[i]) < square_length/2 for i in range(3))):
-            points.append(np.concatenate([p, [get_atom_index(atom)]]))
+        # if all((np.abs(p[i]) < square_length/2 for i in range(3))):
+        points.append(np.concatenate([p, [get_atom_index(atom)]]))
     return points
 
 
@@ -154,12 +160,40 @@ def get_mol(filename):
     if ext == '.mol2' or ext == '.sdf' or ext == ".pdb":
         cmd.delete("all")
         cmd.load(filename)
+        cmd.h_add("all")
         cmd.iterate_state(
-            1, 'all', 'mol.append([x, y, z, elem])', space=locals(), atomic=0)
+            1, f'elem {",".join(atoms_info.keys())}', 'mol.append([x, y, z, elem])', space=locals(), atomic=0)
     else:
         raise Exception()
     return mol
+def get_subdir(path):
+    return os.path.basename(os.path.dirname(path))
 
+def get_bonds(ligand_path, protein_path):
+    # RDLogger.DisableLog('rdApp.*'))
+    warnings.filterwarnings('ignore')
+    cmd = pymol.cmd
+    base, ext = os.path.splitext(ligand_path)
+    mol = []
+
+    if ext == '.mol2' or ext == '.sdf' or ext == ".pdb":
+        cmd.delete("all")
+        cmd.load(ligand_path)
+        cmd.load(protein_path)
+        cmd.h_add("all")
+        cmd.select("don", "(elem n,o and (neighbor hydro))")
+        cmd.select("acc", "(elem o or (elem n and not (neighbor hydro)))")
+        cmd.select("ligand", f"(elem {','.join(atoms_info.keys())} and {get_subdir(ligand_path)}_ligand)")
+        cmd.select("pocket", f"(elem {','.join(atoms_info.keys())} and {get_subdir(protein_path)}_pocket)")
+        select_atom = cmd.find_pairs("(ligand and acc)", "(pocket and don)", cutoff=3.2)
+        select_atom.extend(cmd.find_pairs("(ligand and don)", "(pocket and acc)", cutoff=3.2))
+        h_bond_ligand_index = [str(ligand_atom[1]) for ligand_atom, protein_atom in select_atom]
+        if len(h_bond_ligand_index) != 0:
+            cmd.iterate_state(1, f'(ligand and (index {",".join(h_bond_ligand_index)}))', 'mol.append([x, y, z, elem])', space=locals(), atomic=0)
+
+    else:
+        raise Exception()
+    return mol
 
 def get_points(protein_file_path, ligand_file_path, n_cell=20, cell_size=1):
     grid_length = n_cell*cell_size
@@ -171,10 +205,13 @@ def get_points(protein_file_path, ligand_file_path, n_cell=20, cell_size=1):
     if os.path.exists(pdb_path) and os.path.exists(mol2_path):
         p = get_mol(pdb_path)
         l = get_mol(mol2_path)
-        # p_mol = get_mol(pdb_path)
+        # h_bond_atoms = get_bonds(mol2_path, pdb_path)
+        # ligand_center = calc_center_ligand(l)
         for d in proc_structure(p, l, grid_length):
             protein_points, ligand_points = d
-        return protein_points, ligand_points
+    else:
+        print(pdb_path)
+    return protein_points, ligand_points
 
 
 def xyz(array, p, cell_size=1):
@@ -194,20 +231,22 @@ def fill_cell(array, p, cell_size=1, around=False):
     i = int((p[0] + X*cell_size/2)/cell_size)
     j = int((p[1] + Y*cell_size/2)/cell_size)
     k = int((p[2] + Z*cell_size/2)/cell_size)
+    if i < 0 or i >= X or j < 0 or j >= Y or k < 0 or k >= Z:
+        return 0
     atom_index = int(p[3])
     if not around:
         array[atom_index, i, j, k] = 1
     else:
         for dx, dy, dz in itertools.product([-1,0,1], repeat=3):
-            if dx+i >= 0 and dx+i < 20:
+            if dx+i >= 0 and dx+i < X:
                 x = dx+i
             else:
                 x = i
-            if dy+j >= 0 and dy+j < 20:
+            if dy+j >= 0 and dy+j < Y:
                 y = dy+j
             else:
                 y = j
-            if dz+k >= 0 and dz+k < 20:
+            if dz+k >= 0 and dz+k < Z:
                 z = dz+k
             else:
                 z = k
@@ -224,7 +263,7 @@ def filtering(voxel):
     xx, yy, zz = np.meshgrid(x,y,z)
     kernel = np.exp(-(xx**2 + yy**2 + zz**2)/(2*sigma**2))
     # kernel[2,2,2] = kernel[2,2,2]*2
-    for i in range(3):
+    for i in range(voxel.shape[0]):
         new_voxel[i] = signal.convolve(voxel[i], kernel, mode="same")
     return new_voxel
 
@@ -287,10 +326,10 @@ def savegrid(d, filename, threshold=[0.2, 0.2, 0.2]):
 
     # set the colors of each object
     colors = np.empty(voxels.shape, dtype=object)
-    colors[d[0]] = 'gray'
+    colors[d[0]] = 'green'
     colors[d[1]] = 'red'
     colors[d[2]] = 'blue'
-    # colors[d[3]] = 'green'
+    colors[d[3]] = 'yellow'
     # colors[d[4]] = 'pink'
     # colors[d[5]] = 'yellow'
 
@@ -300,22 +339,7 @@ def savegrid(d, filename, threshold=[0.2, 0.2, 0.2]):
     ax.voxels(voxels, facecolors=colors, edgecolor='k')
     plt.savefig(filename, dpi=140)
 
-def get_threshold(true_grid, target_grid):
-    threshold=[0.5, 0.5, 0.5]
-    max_score = 0
-    for i in range(3):
-        for j in range(20):
-            new_threshold = []
-            new_threshold[:] = threshold
-            new_threshold[i] = j * 0.5/20
-            target = [process_grid(target_grid[k], grid_size=20, threshold=new_threshold).reshape(3, -1) for k in range(len(target_grid))] 
-        
-            target_ = np.array([1 if target[n][l, k] else 0 for k in range(20*20*20) for l in range(3) for n in range(len(target_grid))]).reshape(len(target_grid), 3, -1)
-            if max_score < score_grid(true_grid, target_):
-                max_score = score_grid(true_grid, target_)
-                threshold = new_threshold
-            
-    return new_threshold
+
 from sklearn.metrics import average_precision_score
 
 def score_grid(true_grid, target_grid, is_rotation=False):
@@ -342,9 +366,14 @@ def Rz(theta):
                      [m.sin(theta), m.cos(theta), 0],
                      [0, 0, 1]])
 
+    
+def shaping(p):
+    return p[:,:3].reshape(-1,3,1), p[:,3]
 
 def rotate(points, phi, theta, psi):
-    ps, atoms = shaping(points)
+    if len(points) == 0:
+        return points
+    ps, atoms = shaping(np.array(points))
     R = Rz(psi) * Ry(theta) * Rz(phi)
     outputs = []
     for i in range(len(ps)):
@@ -352,6 +381,26 @@ def rotate(points, phi, theta, psi):
         t.append(atoms[i])
         outputs.append(t)
     return outputs
+
+def shift(points, dx, dy, dz):
+    if len(points) == 0:
+        return points
+    ps, atoms = shaping(np.array(points))
+    diff = np.array([dx, dy, dz])
+    outputs = []
+    for i in range(len(ps)):
+        t = (np.array(ps[i]).reshape(1, -1)+diff).tolist()[0]
+        t.append(atoms[i])
+        outputs.append(np.array(t))
+    return outputs
+
+def random_rotate(points, max_angle=math.pi/3):
+    angles = [random.uniform(-max_angle, max_angle) for i in range(3)]
+    return [rotate(points[i], angles[0], angles[1], angles[2]) for i in range(len(points))]
+
+def random_shift(points, max_shift=5):
+    d = [random.uniform(-max_shift, max_shift) for i in range(3)]
+    return [shift(points[i], d[0], d[1], d[2]) for i in range(len(points))]
 
 def to_xyz_file(atoms, filename="test.xyz"):
     with open(filename, "w") as f:
@@ -369,24 +418,24 @@ def to_xyz(atoms, cell_size=20, n_cell=1):
 import itertools
 def gather(voxel):
     new_voxel = np.zeros(voxel.shape)
-    for i in range(3):
-        for x in range(voxel.shape[1]-2):
-            for y in range(voxel.shape[2]-2):
-                for z in range(voxel.shape[3]-2):
-                    s2 = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-2,-1,0,1,2], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0 and x+dx>=0 and y+dy>=0 and z+dz>=0]
+    for i in range(voxel.shape[0]):
+        for x in range(voxel.shape[1]):
+            for y in range(voxel.shape[2]):
+                for z in range(voxel.shape[3]):
+                    s2 = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-2,-1,0,1,2], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0 and x+dx>=0 and y+dy>=0 and z+dz>=0 and x+dx < voxel.shape[1] and y+dy < voxel.shape[2] and z+dz < voxel.shape[3]]
                     s2.sort(reverse=True)
-                    s1 = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-1,0,1], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0]
+                    s1 = [voxel[i, x+dx, y+dy, z+dz] for dx, dy, dz in itertools.product([-1,0,1], repeat=3) if abs(dx)+abs(dy)+abs(dz)!=0 and x+dx>=0 and y+dy>=0 and z+dz>=0 and x+dx < voxel.shape[1] and y+dy < voxel.shape[2] and z+dz < voxel.shape[3]]
                     s1.sort(reverse=True)
-                    if voxel[i, x, y, z] > s1[2] and i == 0:
+                    if i == 0 and voxel[i, x, y, z] > s1[1] and voxel[i, x, y, z] > s2[3]:
                         new_voxel[i, x, y, z] = voxel[i, x, y, z]
-                    if voxel[i, x, y, z] > s2[0] and i != 0:
+                    if i != 0 and voxel[i, x, y, z] > s1[0]:
                         new_voxel[i, x, y, z] = voxel[i, x, y, z]
     return new_voxel
 
 def voxel_to_xyz(voxel, cell_size=0.5, threshold=[0.9, 0.9, 0.9]):
     points = []
     _, X, Y, Z = voxel.shape
-    for i in range(3):
+    for i in range(voxel.shape[0]):
         for x in range(voxel.shape[1]-1):
             for y in range(voxel.shape[2]-1):
                 for z in range(voxel.shape[3]-1):
@@ -396,3 +445,22 @@ def voxel_to_xyz(voxel, cell_size=0.5, threshold=[0.9, 0.9, 0.9]):
                         p_z = z*cell_size - Z*cell_size/2
                         points.append([p_x, p_y, p_z, i])
     return points
+
+import plotly.graph_objects as go
+
+def isosurface(voxel, voxel_size=32):
+    X, Y, Z = np.mgrid[0:voxel_size:complex(0,voxel_size), 0:voxel_size:complex(0,voxel_size), 0:voxel_size:complex(0,voxel_size)]
+    # ellipsoid
+    fig = go.Figure(data=[go.Isosurface(
+        x=X.flatten(),
+        y=Y.flatten(),
+        z=Z.flatten(),
+        value=voxel[i].flatten(),
+        isomin=0,
+        isomax=np.max(voxel[i].flatten()),
+        surface_count=8, # number of isosurfaces, 2 by default: only min and max
+        colorbar_nticks=8,
+        colorscale=['greens', 'reds', 'blues', "ylgn"][i],
+        caps=dict(x_show=False, y_show=False, z_show=False)
+        ) for i in range(voxel.shape[0])])
+    fig.show()
