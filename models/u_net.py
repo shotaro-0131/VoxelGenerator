@@ -7,7 +7,6 @@ import hydra
 from functools import lru_cache
 
 def get_default_params():
-    latent_dim = 512
     block_num=4
     f_map = [64, 128, 256, 512]
     drop_out = 0
@@ -18,7 +17,7 @@ def get_default_params():
     gpu_id = 0
 
     hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type, pool_kernel_size=pool_kernel_size,
-                            latent_dim=latent_dim, in_channel=7, out_channel=4, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
+                            in_channel=7, out_channel=4, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
 
     return AttributeDict(hyperparameters)
 
@@ -26,9 +25,9 @@ def calc_voxel_size(previous_voxel_size, kernel_size, n, first_layer):
     if n == 0:
         return previous_voxel_size
     if first_layer:
-        return calc_voxel_size(previous_voxel_size-(kernel_size-3)*2, kernel_size, n-1, False)
+        return calc_voxel_size(previous_voxel_size, kernel_size, n-1, False)
     else:
-        return calc_voxel_size(previous_voxel_size//2-(kernel_size-3)*2, kernel_size, n-1, False)
+        return calc_voxel_size(previous_voxel_size//2, kernel_size, n-1, False)
 
 class Block(nn.Module):
     def __init__(self, in_channel, out_channel, kernel_size, drop_out, encoder):
@@ -88,12 +87,6 @@ class Encoder(nn.Module):
         self.blocks = nn.ModuleList([Block(self.params.f_map[i-1] if i != 0 else self.params.in_channel,\
              self.params.f_map[i], self.params.kernel_size, self.params.drop_out, True)
                        for i in range(self.params.block_num)])
-        # self.last_dim = (calc_voxel_size(conf.preprocess.grid_size, self.params.kernel_size, \
-        #  self.params.block_num, True))**3*self.params.f_map[-1]
-        # print(calc_voxel_size(conf.preprocess.grid_size, self.params.kernel_size, \
-        #  self.params.block_num, True))
-        # self.enc_mean = nn.Linear(self.last_dim, self.params.latent_dim)
-        # self.enc_var = nn.Linear(self.last_dim, self.params.latent_dim)
         self.activ = nn.ReLU()
 
     def forward(self, x):
@@ -105,6 +98,7 @@ class Encoder(nn.Module):
             x = self.activ(x)
             encoder_features.append(x)
         x = x.view(x.size(0), -1)
+        
         # mean = self.enc_mean(x)
         # var = self.enc_var(x)
         return x, encoder_features

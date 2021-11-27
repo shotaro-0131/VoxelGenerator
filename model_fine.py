@@ -12,6 +12,7 @@ import os
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 from joblib import parallel_backend, Parallel, delayed
+from multiprocessing import Process
 
 class AttributeDict(object):
     def __init__(self, obj):
@@ -63,16 +64,16 @@ class WrapperModel(pl.LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_nb):
-        x, y = batch
+        x, y, z = batch
         p = self(x)
-        loss = self.loss(p, y)
+        loss = self.loss(p, y, z)
         self.log("train_loss", loss, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch
         p = self.forward(x)
-        val_loss = self.loss(p, y)
+        val_loss = self.loss(p, y, y)
         self.log("val_loss", val_loss, on_epoch=True)
         return {'val_loss': val_loss}
     
@@ -93,33 +94,37 @@ def main(cfg: DictConfig) -> None:
     device = torch.device("cuda:{}".format(gpu_id)) if torch.cuda.is_available() else "cpu"
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
-    loss = Loss()
-    dataloader = DataLoader(
-        DataSet(data["pdb_id"].values[:8000],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size, False, True), batch_size=cfg.training.batch_size, num_workers=4)
+    print(1.0/27.0)
+    loss = VoxelLoss(1.0/27.0)
+    # seed=random.sample(range(10000), k=5000)
+    # dataloader = DataLoader(
+    #     DataSet(data["pdb_id"].values[seed],
+    #             cfg.preprocess.cell_size, cfg.preprocess.grid_size, False, True), batch_size=cfg.training.batch_size, num_workers=4)
     val_dataloader = DataLoader(
         DataSet(data["pdb_id"].values[11000:12000],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size, False, False), batch_size=cfg.training.batch_size)
 
     def objective(trial: optuna.trial.Trial):
-
-        block_num = trial.suggest_int("block_num", 3, 3, log=True)
-        kernel_size = trial.suggest_int("kernel_size", 3, 7, step=2, log=True)
+        seed=random.sample(range(11000), k=5000)
+        dataloader = DataLoader(
+            DataSet(data["pdb_id"].values[seed],
+                    cfg.preprocess.cell_size, cfg.preprocess.grid_size, False, True), batch_size=cfg.training.batch_size, num_workers=4)
+    
+        block_num = trial.suggest_int("block_num", 2, 2, log=True)
+        kernel_size = trial.suggest_int("kernel_size", 3, 7, step=2)
         pool_type = trial.suggest_categorical("pool", ["max", "ave"])
         pool_kernel_size = trial.suggest_int("pool_kernel_size", 2, 2, log=True)
 
         f_map = [
-            trial.suggest_int("channels_{}".format(i), 32, 1024, log=True) for i in range(block_num)
+            trial.suggest_int("channels_{}".format(i), 32, 252, log=True) for i in range(block_num)
         ]
-
-        latent_dim = trial.suggest_int("latent_dim", 64, 1024, log=True)
 
         lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
 
         drop_out = trial.suggest_uniform("drop_out", 0.0, 1.0)
 
         hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type, pool_kernel_size=pool_kernel_size,
-                               latent_dim=latent_dim, in_channel=3, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
+                            in_channel=7, out_channel=3, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
 
         print(hyperparameters)
         model = UNet(AttributeDict(hyperparameters)).to(device)
@@ -148,10 +153,10 @@ def main(cfg: DictConfig) -> None:
 
     #pruner = optuna.pruners.PercentilePruner(60)
     pruner = optuna.pruners.MedianPruner(n_warmup_steps=cfg.training.epoch//2, n_startup_trials=10)
-    study = optuna.create_study(direction='minimize', load_if_exists=True, pruner=pruner, storage="sqlite:///unet.db", study_name="unet")
+    study = optuna.create_study(direction='minimize', load_if_exists=True, pruner=pruner, storage="sqlite:///t.db", study_name="unet")
     #with parallel_backend("multiprocessing", n_jobs=cfg.training.gpu_num):
-    study.optimize(objective, timeout=8*60*55, gc_after_trial=True)
-
+    # study.optimize(objective, timeout=8*60*55, gc_after_trial=True)
+    study.optimize(objective, n_trials=1, gc_after_trial=True)
     print("Number of finished trials: {}".format(len(study.trials)))
 
     print("Best trial:")
@@ -173,5 +178,9 @@ if __name__ == "__main__":
     # rank = comm.Get_rank()
     # GPU_ID=rank
     # time.sleep(rank)
-    main()
+    workers = [Process(target=main) for i in range(3)]
+    for worker in workers:
+        time.sleep(10)
+        worker.start()
+    # main()
 
