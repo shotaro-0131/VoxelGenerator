@@ -1,3 +1,4 @@
+from random import betavariate
 from models.u_net import *
 import hydra
 from omegaconf import DictConfig, omegaconf
@@ -43,7 +44,7 @@ class WrapperModel(pl.LightningModule):
     def _save_model(self, *_):
         pass 
     def training_epoch_end(self, training_step_outputs):
-        torch.save(self.model.state_dict(), "test.pth")
+        torch.save(self.model.state_dict(), "turned_model.pth")
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -61,6 +62,10 @@ def main(cfg: DictConfig) -> None:
     pdb_id_header = "pdb_id"
     test_used = ["3bkl", "2oi0"]
     data = data[~data[pdb_id_header].isin(test_used)]
+    test_used = pd.read_csv(os.path.join(
+                hydra.utils.to_absolute_path(""), cfg.dataset.test_path))
+    data = data[~data[pdb_id_header].isin(test_used)]
+            
     val_dataloader = DataLoader(
         DataSet(data[pdb_id_header].values[15554:17498],
                 cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, False), batch_size=cfg.training.batch_size)
@@ -70,30 +75,26 @@ def main(cfg: DictConfig) -> None:
             DataSet(data[pdb_id_header].values[:15554],
                     cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, True), batch_size=cfg.training.batch_size, num_workers=4)
     
-    latent_dim = 512
+    loaded_study = optuna.load_study(study_name="unet", storage="sqlite:///test2.db")
+    best_params = loaded_study.best_params
+    print(best_params)
 
-    block_num=4
-    f_map = [64, 128, 256, 512]
-    drop_out = 0
-    kernel_size = 3
-    lr = 0.001
-    pool_type="ave"
-    pool_kernel_size = 2
-
-    hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type, pool_kernel_size=pool_kernel_size,
-                            latent_dim=latent_dim, in_channel=7, out_channel=4, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
+    hyperparameters = dict(block_num=best_params["block_num"], kernel_size=best_params["kernel_size"],
+    f_map=[best_params[f"channels_{i}"] for i in range(best_params["block_num"])],
+    pool_type=best_params["pool"], pool_kernel_size=best_params["pool_kernel_size"],
+                            latent_dim=0, in_channel=7, out_channel=3, lr=best_params["lr"], drop_out=0, gpu_id=gpu_id)
 
     print(hyperparameters)
     model = UNet(AttributeDict(hyperparameters)).to(device)
     # model = torch.nn.DataParallel(
     #     model) if cfg.training.gpu_num > 1 else model
-    trainer = pl.Trainer(max_epochs=cfg.training.epoch,
+    trainer = pl.Trainer(max_epochs=best_params["epoch"],
                             progress_bar_refresh_rate=20,
                             gpus=[gpu_id],
                             logger=False,
                             checkpoint_callback=False,
     )
-    model = WrapperModel(model, loss, lr).to(device)
+    model = WrapperModel(model, loss, best_params["lr"]).to(device)
     mlflow.pytorch.autolog(log_models=False)
     with mlflow.start_run(experiment_id=2) as run:
         mlflow.set_tags(hyperparameters)
