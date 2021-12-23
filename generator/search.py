@@ -5,9 +5,10 @@ reference
 from __future__ import division
 
 from numpy.lib.npyio import savez_compressed
-from myMcts import mcts
+from myMcts import MyMcts as mcts
+# from mcts import mcts
 import hydra
-from icecream import ic
+# from icecream import ic
 from rdkit import rdBase
 from rdkit.Chem import PandasTools, QED
 from utils.preprocess import *
@@ -78,6 +79,7 @@ import itertools
 
 from copy import deepcopy
 import math
+
 class BondType:
     def __init__(self, atoms, min_len, max_len, hands):
         self.atoms = atoms
@@ -160,11 +162,15 @@ class GridState(StateInterface):
     self.qed_list = [0]
     self.qed=-1
     self.vina_score=999
+    self.next_actions=[]
 
   def getCurrentPlayer(self):
     return self.current_player
 
   def getPossibleActions(self):
+    # if len(self.atom_)
+    if len(self.next_actions) != 0:
+      return self.next_actions    
     possibleActions = []
     for target, state in enumerate(self.state_index):
       t, x, y, z = state
@@ -215,6 +221,7 @@ class GridState(StateInterface):
             if new_x >= 0 and new_y >= 0 and new_z >= 0 and new_x < 32 and new_y < 32 and new_z < 32:
               if self.voxel[bondType.get(t), new_x, new_y, new_z] > 0:
                   possibleActions.append(AtomAdd((new_x, new_y, new_z), bondType.get(t), target, bondType.hands, connected_index, connected_hands))
+    self.next_actions=possibleActions
     return possibleActions
     
   def min_max(self,voxel):
@@ -267,6 +274,7 @@ class GridState(StateInterface):
     newState.current_player = self.current_player
     newState.have_bond[action.selected_index] = newState.have_bond[action.selected_index] + action.bond
     newState.have_bond.append(newBond)
+    newState.next_actions=[]
     # newState.qed_list.append(newState.getQED())
 
     for s in newState.state_index:
@@ -275,15 +283,15 @@ class GridState(StateInterface):
     return newState
 
   def isTerminal(self):
-    if np.min(self.voxel[self.state_index[-1][0], self.state_index[-1][1], self.state_index[-1][2], self.state_index[-1][3]]) == 0:
-      qed, sa_score, vina_score = self.get_scores()
-      with open(f"{self.target}.csv", "a") as file_object:
-        file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.voxel*self.state_voxel)}, {len(self.state_index)}\n")
-      return True
+    # if np.min(self.voxel[self.state_index[-1][0], self.state_index[-1][1], self.state_index[-1][2], self.state_index[-1][3]]) == 0:
+    #   qed, sa_score, vina_score = self.get_scores()
+    #   with open(f"{self.target}.csv", "a") as file_object:
+    #     file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.raw_voxel*self.state_voxel)}, {len(self.state_index)}\n")
+    #   return True
     if len(self.state_index)-self.length > 29:
       qed, sa_score, vina_score = self.get_scores()
       with open(f"{self.target}.csv", "a") as file_object:
-        file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.voxel*self.state_voxel)}, {len(self.state_index)}\n")
+        file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.raw_voxel*self.state_voxel)}, {len(self.state_index)}\n")
       return True
     # if 0 > self.qed_list[-1]:
     #   with open("sample.csv", "a") as file_object:
@@ -292,7 +300,7 @@ class GridState(StateInterface):
     if len(self.getPossibleActions()) == 0:
       qed, sa_score, vina_score = self.get_scores()
       with open(f"{self.target}.csv", "a") as file_object:
-        file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.voxel*self.state_voxel)}, {len(self.state_index)}\n")
+        file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.raw_voxel*self.state_voxel)}, {len(self.state_index)}\n")
       return True
     return False
 
@@ -304,6 +312,10 @@ class GridState(StateInterface):
     # subprocess.run(["obabel",f"ada17/tmp/test.xyz","-O",f"ada17/tmp/{self.__hash__()}.sdf"]) 
     # qed, sa_score = self.get_scores()
     # print(self.qed_list[-5:])
+    if self.qed == -1:
+      return -1
+    if self.vina_score > 200:
+      return -1 
     return self.qed*(200-self.vina_score)
 
   def get_scores(self):
@@ -330,7 +342,7 @@ class GridState(StateInterface):
       # print("error", len(self.state_index))
       self.qed=-1
       self.vina_score=999
-      return  -1, 20, 999
+      return  -1, 10, 999
     
 
   def __eq__(self, other):
