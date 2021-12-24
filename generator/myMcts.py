@@ -1,8 +1,9 @@
 import time
 import math
 import random
+from mcts import mcts, treeNode, randomPolicy
 
-def randomPolicy(state):
+def myPolicy(state):
     while not state.isTerminal():
         try:
             action = random.choice(state.getPossibleActions())
@@ -11,45 +12,12 @@ def randomPolicy(state):
         state = state.takeAction(action)
     return state.getReward()
 
-
-class treeNode():
-    def __init__(self, state, parent):
-        self.state = state
-        self.isTerminal = state.isTerminal()
-        self.isFullyExpanded = self.isTerminal
-        self.parent = parent
-        self.numVisits = 0
-        self.totalReward = 0
-        self.children = {}
-
-    def __str__(self):
-        s=[]
-        s.append("totalReward: %s"%(self.totalReward))
-        s.append("numVisits: %d"%(self.numVisits))
-        s.append("isTerminal: %s"%(self.isTerminal))
-        s.append("possibleActions: %s"%(self.children.keys()))
-        return "%s: {%s}"%(self.__class__.__name__, ', '.join(s))
-
-class mcts():
+class MyMcts(mcts):
     def __init__(self, timeLimit=None, iterationLimit=None, explorationConstant=1 / math.sqrt(2),
                  rolloutPolicy=randomPolicy):
-        if timeLimit != None:
-            if iterationLimit != None:
-                raise ValueError("Cannot have both a time limit and an iteration limit")
-            # time taken for each MCTS search in milliseconds
-            self.timeLimit = timeLimit
-            self.limitType = 'time'
-        else:
-            if iterationLimit == None:
-                raise ValueError("Must have either a time limit or an iteration limit")
-            # number of iterations of the search
-            if iterationLimit < 1:
-                raise ValueError("Iteration limit must be greater than one")
-            self.searchLimit = iterationLimit
-            self.limitType = 'iterations'
-        self.explorationConstant = explorationConstant
-        self.rollout = rolloutPolicy
-
+        super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
+        print("aaa")
+    
     def search(self, initialState, needDetails=False):
         self.root = treeNode(initialState, None)
 
@@ -96,24 +64,23 @@ class mcts():
 
         raise Exception("Should never reach here")
 
-    def backpropogate(self, node, reward):
-        while node is not None:
-            node.numVisits += 1
-            node.totalReward += reward
-            node = node.parent
-
     def getBestChild(self, node, explorationValue):
+        print(node.numVisits)
+        print(len(node.children))
         bestValue = float("-inf")
         bestNodes = []
+        sumProb=node.state.sumProb
+        # sumProb=sum([node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]] for child in node.children.values()])
         for child in node.children.values():
-            # c = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]
-            c=1
-            nodeValue = node.state.getCurrentPlayer() * child.totalReward / child.numVisits + explorationValue * c * math.sqrt(
+            p = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]/sumProb
+            # p=1
+            nodeValue = node.state.getCurrentPlayer() * child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
                 2 * math.log(node.numVisits) / child.numVisits)
             if nodeValue > bestValue:
                 bestValue = nodeValue
                 bestNodes = [child]
             elif nodeValue == bestValue:
                 bestNodes.append(child)
+        print(bestValue)
         return random.choice(bestNodes)
 
