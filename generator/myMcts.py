@@ -66,12 +66,15 @@ class MyMcts(mcts):
 
     def getBestChild(self, node, explorationValue):
         print(node.numVisits)
+        print(len(node.children))
         bestValue = float("-inf")
         bestNodes = []
+        sumProb=node.state.sumProb
+        # sumProb=sum([node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]] for child in node.children.values()])
         for child in node.children.values():
-            c = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]
-            # c=1
-            nodeValue = node.state.getCurrentPlayer() * child.totalReward / child.numVisits + explorationValue * c * math.sqrt(
+            p = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]/sumProb
+            # p=1
+            nodeValue = node.state.getCurrentPlayer() * child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
                 2 * math.log(node.numVisits) / child.numVisits)
             if nodeValue > bestValue:
                 bestValue = nodeValue
