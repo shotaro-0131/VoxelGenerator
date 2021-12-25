@@ -1,12 +1,15 @@
 import time
 import math
 import random
+import numpy as np
 from mcts import mcts, treeNode, randomPolicy
 
 def myPolicy(state):
     while not state.isTerminal():
         try:
-            action = random.choice(state.getPossibleActions())
+            # action = random.choice(state.getPossibleActions())
+            possibleActions = state.getPossibleActions()
+            action = random.choices(possibleActions, weights=state.next_probs)[0]
         except IndexError:
             raise Exception("Non-terminal state has no possible actions: " + str(state))
         state = state.takeAction(action)
