@@ -181,6 +181,7 @@ class GridState(StateInterface):
     self.qed=-1
     self.vina_score=99
     self.next_actions=[]
+    self.next_probs=[]
 
   def getCurrentPlayer(self):
     return self.current_player
@@ -192,17 +193,22 @@ class GridState(StateInterface):
 
     if len(self.state_index) == 0:  
       possibleActions = []
+      next_probs=[]
       self.sumProb=0
       for x in range(16-2,16+2):
           for y in range(16-2,16+2):
             for z in range(16-2,16+2):
               possibleActions.append(InitAtomAdd([x,y,z],0))
               self.sumProb+=self.raw_voxel[0, x, y, z]
+              next_probs.append(self.raw_voxel[0, x, y, z])
       self.next_actions=possibleActions
+      self.next_probs=next_probs
       return possibleActions    
 
     possibleActions = []
     self.sumProb=0
+    self.next_probs=[]
+    next_probs=[]
     for target, state in enumerate(self.state_index):
       t, x, y, z = state
     
@@ -256,7 +262,9 @@ class GridState(StateInterface):
               if self.voxel[bondType.get(t), new_x, new_y, new_z] > 0:
                   possibleActions.append(AtomAdd((new_x, new_y, new_z), bondType.get(t), target, bondType.hands, connected_index, connected_hands))
                   self.sumProb+=self.raw_voxel[new_t, new_x, new_y, new_z]
+                  next_probs.append(self.raw_voxel[new_t, new_x, new_y, new_z]) 
     self.next_actions=possibleActions
+    self.next_probs=next_probs
     return possibleActions
     
   def min_max(self,voxel):
@@ -363,7 +371,10 @@ class GridState(StateInterface):
     #   return 0.5*-self.vina_score
     # if self.vina_score > 200:
     #   return -1 
-    return -self.vina_score
+    if len(self.state_index)>10:
+      return -self.vina_score
+    else:
+      return -99
 
   def get_scores(self):
     warnings.filterwarnings('ignore')
