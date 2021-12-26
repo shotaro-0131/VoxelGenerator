@@ -139,8 +139,9 @@ BondTypes=[CC1,CC2,CO1,CO2,CN1,CN2]
 import os 
 
 class GridState(StateInterface):
-  def __init__(self, target):
+  def __init__(self, target, use_knowledge):
     self.target=target
+    self.use_knowledge=use_knowledge
     self.voxel = np.load(os.path.join(
         hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel.npy"))[:3]
     self.raw_voxel= np.load(os.path.join(
@@ -259,7 +260,7 @@ class GridState(StateInterface):
                 if connected_bond.hands + bondType.hands > self.atom_hands[new_t]-1:
                     continue
             if new_x >= 0 and new_y >= 0 and new_z >= 0 and new_x < 32 and new_y < 32 and new_z < 32:
-              if self.voxel[bondType.get(t), new_x, new_y, new_z] > 0:
+              if not self.use_knowledge or self.voxel[bondType.get(t), new_x, new_y, new_z] > 0:
                   possibleActions.append(AtomAdd((new_x, new_y, new_z), bondType.get(t), target, bondType.hands, connected_index, connected_hands))
                   self.sumProb+=self.raw_voxel[new_t, new_x, new_y, new_z]
                   next_probs.append(self.raw_voxel[new_t, new_x, new_y, new_z]) 
@@ -453,12 +454,13 @@ def main(cfg):
       os.mkdir(f"{cfg.target}/tmp")
     except Exception as e:
       print(e)
-    state = GridState(cfg.target)
-    searcher = mcts(iterationLimit=10000)
+    state = GridState(cfg.target, cfg.setting.use_knowledge)
+    searcher = mcts(iterationLimit=10000, use_knowledge=cfg.setting.use_knowledge)
     pre_reward = -1
     reward = 0
     count = 0
     action = None
+    
     center=calc_center_ligand(get_mol(os.path.join(hydra.utils.to_absolute_path(""), f"test_data/{cfg.target}/crystal_ligand.mol2")))
     with open(f"{cfg.target}.csv", "w") as file_object:
       file_object.write("hash, qed, sascore, vina_socre, score, length\n")

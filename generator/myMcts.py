@@ -17,9 +17,11 @@ def myPolicy(state):
 
 class MyMcts(mcts):
     def __init__(self, timeLimit=None, iterationLimit=None, explorationConstant=1 / math.sqrt(2),
-                 rolloutPolicy=randomPolicy):
-        super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
-        print("aaa")
+                 use_knowledge=False):
+        if use_knowledge:
+            super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
+        else:
+            super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
     
     def search(self, initialState, needDetails=False):
         self.root = treeNode(initialState, None)
@@ -77,8 +79,9 @@ class MyMcts(mcts):
         for child in node.children.values():
             p = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]/sumProb
             # p=1
-            nodeValue = node.state.getCurrentPlayer() * child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
-                2 * math.log(node.numVisits) / child.numVisits)
+            nodeValue = child.totalReward / child.numVisits + p*math.sqrt(node.numVisits)/(1+child.numVisits)
+            # nodeValue = child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
+            #     2 * math.log(node.numVisits) / child.numVisits)
             if nodeValue > bestValue:
                 bestValue = nodeValue
                 bestNodes = [child]

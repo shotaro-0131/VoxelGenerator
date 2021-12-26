@@ -1,14 +1,7 @@
-dataset:
-  train_path: v2020_index.csv
-  test_path: v2020_index.csv
-  # data_dir: ["D:", "v2020_PL_all"]
-  data_dir: ["/mnt/d/v2020_PL_all"]
 setting:
   grid_size: 32
   cell_size: 0.5
-model:
-  name: vae
-  model_path: [""]
+  use_knowledge: False
 target: ""
 hydra:
   run:
