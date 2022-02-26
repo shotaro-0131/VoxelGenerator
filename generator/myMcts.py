@@ -21,8 +21,10 @@ class MyMcts(mcts):
         if use_knowledge:
             super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
         else:
-            super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
-    
+            super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, randomPolicy)
+        self.Q = np.zeros((3, 32, 32, 32))
+        self.N = np.zeros((3, 32, 32, 32))
+
     def search(self, initialState, needDetails=False):
         self.root = treeNode(initialState, None)
 
@@ -47,6 +49,9 @@ class MyMcts(mcts):
         """
         node = self.selectNode(self.root)
         reward = self.rollout(node.state)
+        for (t, x, y, z) in node.state.state_index:
+            self.Q[t, x, y, z] += reward
+            self.N[t, x, y, z] += 1.0
         self.backpropogate(node, reward)
 
     def selectNode(self, node):
@@ -74,14 +79,16 @@ class MyMcts(mcts):
         print(len(node.children))
         bestValue = float("-inf")
         bestNodes = []
-        sumProb=node.state.sumProb
+        # sumProb=node.state.sumProb
         # sumProb=sum([node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]] for child in node.children.values()])
         for child in node.children.values():
-            p = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]/sumProb
-            # p=1
-            nodeValue = child.totalReward / child.numVisits + p*math.sqrt(node.numVisits)/(1+child.numVisits)
-            # nodeValue = child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
-            #     2 * math.log(node.numVisits) / child.numVisits)
+            # p = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]/sumProb
+            p=1
+            # nodeValue = child.totalReward / child.numVisits + p*math.sqrt(node.numVisits)/(1+child.numVisits)
+            nodeValue = child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
+                2 * math.log(node.numVisits) / child.numVisits)
+            if self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]] != 0:
+                nodeValue += self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]/self.N[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]
             if nodeValue > bestValue:
                 bestValue = nodeValue
                 bestNodes = [child]
