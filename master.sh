@@ -36,4 +36,4 @@ unset __conda_setup
 conda activate py36
 python3 -m pip install --user -r requirements.txt
 
-python model_fine.py training.gpu_num=2
+mpirun -np 4 python model_fine.py training.gpu_num=4

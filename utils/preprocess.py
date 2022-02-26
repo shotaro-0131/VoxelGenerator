@@ -339,9 +339,6 @@ def savegrid(d, filename, threshold=[0.2, 0.2, 0.2]):
     ax.voxels(voxels, facecolors=colors, edgecolor='k')
     plt.savefig(filename, dpi=140)
 
-
-from sklearn.metrics import average_precision_score
-
 def score_grid(true_grid, target_grid, is_rotation=False):
     score = 0
     for i in range(3):

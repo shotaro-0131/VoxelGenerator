@@ -143,9 +143,9 @@ class GridState(StateInterface):
     self.target=target
     self.use_knowledge=use_knowledge
     self.voxel = np.load(os.path.join(
-        hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel.npy"))[:3]
+        hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel_1.npy"))[:3]
     self.raw_voxel= np.load(os.path.join(
-        hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel.npy"))[:3]
+        hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel_1.npy"))[:3]
     
     self.next_atom = {0: [0, 1, 2, 3], 1:[0], 2:[0], 3:[0]}
     self.atom_hands = {0: 4, 1: 3, 2: 4, 3: 4}
@@ -415,8 +415,9 @@ class GridState(StateInterface):
       self.qed=df["QED"][0]
       self.vina_score=vina_score
       return  df["QED"][0], df["SA_score"][0], vina_score
-    except:
+    except Exception as e:
       # print("error", len(self.state_index))
+      print(e)
       self.qed=-1
       self.vina_score=99
       return  -1, 10, 99
@@ -487,11 +488,5 @@ import signal
 import atexit
 import time
 if __name__ == "__main__":
-    # def handler(signum, frame):
-    #     print("止まるよ")
-    #     sys.exit(1)
-    # signal.signal(signal.SIGTERM, handler)
-    # signal.signal(signal.SIGINT, handler)
-    # time.sleep(100)
     main()
   

@@ -33,6 +33,11 @@ class VoxelLoss(nn.Module):
 
     def forward(self, outputs, targets, around=None):
         reconstruction_loss = (1-self.alpha)*F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), targets.view(outputs.shape[0], -1))
+<<<<<<< Updated upstream
         if around != None:
             reconstruction_loss += self.alpha*F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), around.view(outputs.shape[0], -1))
         return reconstruction_loss
+=======
+        reconstruction_loss += self.alpha*F.binary_cross_entropy(outputs.view(outputs.shape[0], -1), around.view(outputs.shape[0], -1))
+        return reconstruction_loss
+>>>>>>> Stashed changes

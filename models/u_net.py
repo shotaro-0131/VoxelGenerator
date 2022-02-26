@@ -30,7 +30,7 @@ def calc_voxel_size(previous_voxel_size, kernel_size, n, first_layer):
         return calc_voxel_size(previous_voxel_size//2, kernel_size, n-1, False)
 
 class Block(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size, drop_out, encoder):
+    def __init__(self, in_channel, out_channel, kernel_size, encoder):
         super(Block, self).__init__()
         self.activ = nn.ReLU()
 
@@ -85,7 +85,7 @@ class Encoder(nn.Module):
         else:
             self.pooling = nn.AvgPool3d(kernel_size=self.params.pool_kernel_size)
         self.blocks = nn.ModuleList([Block(self.params.f_map[i-1] if i != 0 else self.params.in_channel,\
-             self.params.f_map[i], self.params.kernel_size, self.params.drop_out, True)
+             self.params.f_map[i], self.params.kernel_size, True)
                        for i in range(self.params.block_num)])
         self.activ = nn.ReLU()
 
@@ -119,18 +119,18 @@ class Decoder(nn.Module):
                                                self.params.kernel_size, self.params.block_num, True)
         self.first_dim = (self.first_voxel)**3*self.params.f_map[-1]
         # self.fc = nn.Linear(self.params.latent_dim, self.first_dim)
-        self.drop_out = nn.Dropout(p=params.drop_out)
+        #self.drop_out = nn.Dropout(p=params.drop_out)
         self.active = nn.ReLU()
 
     def forward(self, x, encoder_features):
         # x = self.fc(x)
         # x = self.active(x)
-        x = x.view(x.size(0), self.params.f_map[-1], self.first_voxel, self.first_voxel, self.first_voxel)
+        #x = x.view(x.size(0), self.params.f_map[-1], self.first_voxel, self.first_voxel, self.first_voxel)
         for i in range(self.params.block_num):
             if i != 0:
                 x = self.upsamplings[i](x)
                 x = self.active(x)
-                x = self.concat(self.drop_out(encoder_features[self.params.block_num-i-1]), x)
+                x = self.concat(encoder_features[self.params.block_num-i-1], x)
             x = self.blocks[i](x)
             if i != self.params.block_num-1:
                 x = self.active(x)
