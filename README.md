@@ -28,7 +28,7 @@ Generator(MCTS):
 Hyperparameters Optimization:<br>
 実行結果とスコアがDBに保存される
 ```bash
-python model_fine.py
+python model_fine.py training.batch_size={バッチサイズ} training.gpu_num={GPUの数}
 ```
 Training:<br>
 最適化したハイパーパラメータで訓練
