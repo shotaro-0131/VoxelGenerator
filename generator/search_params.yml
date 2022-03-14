@@ -3,6 +3,15 @@ setting:
   cell_size: 0.5
   use_knowledge: False
 target: ""
+data_dir: test_data/
+predicted_file: pred_voxel.npy
+iterationLimit: 10000
+max_length: 30
+penalty:
+  qed: -1
+  vina_score: 99
+ligand_file: crystal_ligand.mol2
+center_position: []
 hydra:
   run:
     dir: result/

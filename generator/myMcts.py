@@ -79,13 +79,9 @@ class MyMcts(mcts):
         print(len(node.children))
         bestValue = float("-inf")
         bestNodes = []
-        # sumProb=node.state.sumProb
-        # sumProb=sum([node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]] for child in node.children.values()])
         for child in node.children.values():
-            # p = node.state.raw_voxel[child.state.state_index[-1][0], child.state.state_index[-1][1], child.state.state_index[-1][2], child.state.state_index[-1][3]]/sumProb
-            p=1
-            # nodeValue = child.totalReward / child.numVisits + p*math.sqrt(node.numVisits)/(1+child.numVisits)
-            nodeValue = child.totalReward / child.numVisits + explorationValue * p * math.sqrt(
+            # nodeValue = child.totalReward / child.numVisits + math.sqrt(node.numVisits)/(1+child.numVisits)
+            nodeValue = child.totalReward / child.numVisits + explorationValue * math.sqrt(
                 2 * math.log(node.numVisits) / child.numVisits)
             if self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]] != 0:
                 nodeValue += self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]/self.N[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]

@@ -17,7 +17,7 @@ def get_default_params():
     gpu_id = 0
 
     hyperparameters = dict(block_num=block_num, kernel_size=kernel_size, f_map=f_map, pool_type=pool_type, pool_kernel_size=pool_kernel_size,
-                            in_channel=7, out_channel=4, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
+                            in_channel=7, out_channel=3, lr=lr, drop_out=drop_out, gpu_id=gpu_id)
 
     return AttributeDict(hyperparameters)
 
@@ -97,10 +97,8 @@ class Encoder(nn.Module):
             x = self.blocks[i](x)
             x = self.activ(x)
             encoder_features.append(x)
-        x = x.view(x.size(0), -1)
-        
-        # mean = self.enc_mean(x)
-        # var = self.enc_var(x)
+        #x = x.view(x.size(0), -1)
+
         return x, encoder_features
 
 
@@ -112,20 +110,16 @@ class Decoder(nn.Module):
         self.params = params if params != None else self.get_default_params()
         self.upsamplings = nn.ModuleList([Upsample(self.params.f_map[self.params.block_num-i-1], self.params.f_map[self.params.block_num-i-1], self.params.pool_kernel_size, self.params.pool_kernel_size) for i in range(self.params.block_num)])
         self.blocks = nn.ModuleList([Block(self.params.f_map[i]*2 if i != self.params.block_num-1 else self.params.f_map[i], \
-            self.params.f_map[i-1] if i != 0 else self.params.out_channel, self.params.kernel_size, self.params.drop_out, False)
+            self.params.f_map[i-1] if i != 0 else self.params.out_channel, self.params.kernel_size, False)
                        for i in reversed(range(self.params.block_num))])
         self.concat = partial(self._concat)
         self.first_voxel = calc_voxel_size(conf.preprocess.grid_size,
                                                self.params.kernel_size, self.params.block_num, True)
         self.first_dim = (self.first_voxel)**3*self.params.f_map[-1]
-        # self.fc = nn.Linear(self.params.latent_dim, self.first_dim)
         #self.drop_out = nn.Dropout(p=params.drop_out)
         self.active = nn.ReLU()
 
     def forward(self, x, encoder_features):
-        # x = self.fc(x)
-        # x = self.active(x)
-        #x = x.view(x.size(0), self.params.f_map[-1], self.first_voxel, self.first_voxel, self.first_voxel)
         for i in range(self.params.block_num):
             if i != 0:
                 x = self.upsamplings[i](x)
@@ -151,8 +145,7 @@ class UNet(nn.Module):
         self.enc = Encoder(params)
         fields = copy.deepcopy(params.fields())
         dec_params = AttributeDict(fields)
-        dec_params.__setstate__([("out_channel", 1)])
-        print(params.__getstate__())
+        dec_params.__setstate__([("out_channel", 3 if params.out_channel==1 else 1)])
         self.decs = nn.ModuleList([Decoder(dec_params) for i in range(params.out_channel)])
         if params.gpu_id != None:
             self.device = torch.device("cuda:{}".format(params.gpu_id)) if torch.cuda.is_available() else "cpu"

@@ -5,6 +5,7 @@ reference
 from __future__ import division
 
 from numpy.lib.npyio import savez_compressed
+from models.u_net import UNet
 from myMcts import MyMcts as mcts
 # from mcts import mcts
 import hydra
@@ -70,7 +71,6 @@ class AtomAdd(ActionInterface):
   def __eq__(self, other):
     return self.__class__ == other.__class__ and self.position == other.position and self.atom_type == other.atom_type and self.bond == other.bond
 
-    # return self.__class__ == other.__class__ and self.position == other.position and self.atom_type == other.atom_type and self.selected_index == other.selected_index and self.bond == other.bond and self.connected_index == other.connected_index and self.connected_bond == other.connected_bond
 
   def __hash__(self):
     return hash((self.position[0], self.position[1], self.position[2], self.atom_type, self.bond, self.__class__, self.connected_index, self.connected_bond))
@@ -104,14 +104,6 @@ class BondType:
     def isOut(self, dist):
         return self.max_len < dist 
         
-# CC1 = BondType([0,0], 1.54, 1)
-# CC2 = BondType([0,0], 1.34, 2)
-# CC3 = BondType([0,0], 1.20, 3)
-# CO1 = BondType([0,1], 1.43, 1)
-# CO2 = BondType([0,1], 1.22, 2)
-# CN1 = BondType([0,2], 1.45, 1)
-# CN2 = BondType([0,2], 1.28, 2)
-# CN3 = BondType([0,2], 1.16, 3)
 
 """
 https://cccbdb.nist.gov/expbondlengths1x.asp
@@ -139,48 +131,36 @@ BondTypes=[CC1,CC2,CO1,CO2,CN1,CN2]
 import os 
 
 class GridState(StateInterface):
-  def __init__(self, target, use_knowledge):
-    self.target=target
-    self.use_knowledge=use_knowledge
+  def __init__(self, cfg):
+    self.target=cfg.target
+    self.use_knowledge=cfg.setting.use_knowledge
     self.voxel = np.load(os.path.join(
-        hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel_1.npy"))[:3]
+        hydra.utils.to_absolute_path(""), cfg.data_dir, cfg.target, cfg.predicted_file))[:3]
     self.raw_voxel= np.load(os.path.join(
-        hydra.utils.to_absolute_path(""), f"test_data/{target}/pred_voxel_1.npy"))[:3]
-    
-    self.next_atom = {0: [0, 1, 2, 3], 1:[0], 2:[0], 3:[0]}
-    self.atom_hands = {0: 4, 1: 3, 2: 4, 3: 4}
-    self.center=calc_center_ligand(get_mol(os.path.join(hydra.utils.to_absolute_path(""), f"test_data/{target}/crystal_ligand.mol2")))
-    self.cell_size = 0.5
-    self.cell_num = 32
+        hydra.utils.to_absolute_path(""), cfg.data_dir, cfg.target, cfg.predicted_file))[:3]
+    self.data_dir = cfg.data_dir
+    self.next_atom = {0: [0, 1, 2], 1:[0], 2:[0]}
+    self.atom_hands = {0: 4, 1: 3, 2: 4}
+    self.center=calc_center_ligand(get_mol(os.path.join(hydra.utils.to_absolute_path(""), cfg.data_dir, cfg.target, cfg.ligand_file)))
+    self.grid_size = cfg.setting.grid_size
+    self.cell_size = cfg.setting.cell_size
 
     self.voxel = self.standard(self.voxel)
-    self.max_cell = np.max(self.voxel.flatten())
-    self.current_player = 1
-    self.state_voxel = np.zeros((3,32,32,32))
+    self.state_voxel = np.zeros((3,cfg.setting.grid_size,cfg.setting.grid_size,cfg.setting.grid_size))
     self.state_index=[]
     self.have_bond = []
-    # """
-    # self.state_index = [[e[0] for e in np.where(self.voxel==np.max(self.voxel[0]))]]
-    # self.have_bond = [0]
-    # self.state_voxel[self.state_index[0][0],self.state_index[0][1],self.state_index[0][2],self.state_index[0][3]] = 1
-    # """
-    self.length = 0
 
-    # self.center = np.array([81.11560283,  5.23239707, 31.73384111])
-    # self.valid = [(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if 0.25*(dx*dx + dy*dy + dz*dz) >= self.min_len*self.min_len and 0.25*(dx*dx + dy*dy + dz*dz) <= self.max_len*self.max_len]
-    # self.invalid = [(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if dx*dx + dy*dy + dz*dz < self.min_len*self.min_len]
-
-    self.bondTypes = [[x for x in BondTypes if t in x.atoms] for t in [0,1,2,3]]
-    # self.disable_index = [(self.state_index[0][0]+dx, self.state_index[0][1]+dy, self.state_index[0][2]+dz) for dx, dy, dz in self.invalid]
+    self.bondTypes = [[x for x in BondTypes if t in x.atoms] for t in [0,1,2]]
     self.disable_index = []
 
     self.invalid2=[[(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if 0.25*(dx*dx + dy*dy + dz*dz) < l*l] for l in MAX_LENGTH]
-    # self.invalid = [(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if dx*dx + dy*dy + dz*dz < self.min_len*self.min_len]
-    # self.invalid2 = [(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if dx*dx + dy*dy + dz*dz < (self.max_len)*(self.max_len)]
     self.connected_atoms = [[]]
     self.qed_list = [0]
+    self.qed_penalty=cfg.penalty.qed
+    self.vina_score_penalty=cfg.penalty.vina_score
     self.qed=-1
     self.vina_score=99
+    self.max_length=cfg.max_length
     self.next_actions=[]
     self.next_probs=[]
 
@@ -196,9 +176,9 @@ class GridState(StateInterface):
       possibleActions = []
       next_probs=[]
       self.sumProb=0
-      for x in range(16-2,16+2):
-          for y in range(16-2,16+2):
-            for z in range(16-2,16+2):
+      for x in range(self.grid_size//2-2,self.grid_size//2+2):
+          for y in range(self.grid_size//2-2,self.grid_size//2+2):
+            for z in range(self.grid_size//2-2,self.grid_size//2+2):
               possibleActions.append(InitAtomAdd([x,y,z],0))
               self.sumProb+=self.raw_voxel[0, x, y, z]
               next_probs.append(self.raw_voxel[0, x, y, z])
@@ -259,7 +239,7 @@ class GridState(StateInterface):
                     continue
                 if connected_bond.hands + bondType.hands > self.atom_hands[new_t]-1:
                     continue
-            if new_x >= 0 and new_y >= 0 and new_z >= 0 and new_x < 32 and new_y < 32 and new_z < 32:
+            if new_x >= 0 and new_y >= 0 and new_z >= 0 and new_x < self.grid_size and new_y < self.grid_size and new_z <  self.grid_size:
               if not self.use_knowledge or self.voxel[bondType.get(t), new_x, new_y, new_z] > 0:
                   possibleActions.append(AtomAdd((new_x, new_y, new_z), bondType.get(t), target, bondType.hands, connected_index, connected_hands))
                   self.sumProb+=self.raw_voxel[new_t, new_x, new_y, new_z]
@@ -279,7 +259,7 @@ class GridState(StateInterface):
 
   def index2point(self):
       points = []
-      position = lambda x: x*self.cell_size-0.5*self.cell_size*self.cell_num
+      position = lambda x: x*self.cell_size-0.5*self.cell_size*self.grid_size
       for t, x, y, z in self.state_index:
         points.append([position(x), position(y), position(z), t])
       return points
@@ -319,26 +299,22 @@ class GridState(StateInterface):
         newBond = newBond + action.connected_bond
         if self.have_bond[action.connected_index] + action.connected_bond  >= self.atom_hands[self.state_index[action.connected_index][0]]-1:
           c_pos = newState.state_index[action.connected_index]
-          disable_index.extend([(c_pos[1]+dx, c_pos[2]+dy, c_pos[3]+dz) for dx, dy, dz in self.invalid2[c_pos[0]] if c_pos[1]+dx>=0 and c_pos[2]+dy>=0 and c_pos[3]+dz>=0 and c_pos[1]+dx < 32 and c_pos[2]+dy < 32 and c_pos[3]+dz < 32])
+          disable_index.extend([(c_pos[1]+dx, c_pos[2]+dy, c_pos[3]+dz) for dx, dy, dz in self.invalid2[c_pos[0]] if c_pos[1]+dx>=0 and c_pos[2]+dy>=0 and c_pos[3]+dz>=0 and c_pos[1]+dx < self.grid_size and c_pos[2]+dy < self.grid_size and c_pos[3]+dz < self.grid_size])
         if action.connected_bond+action.bond>=self.atom_hands[action.atom_type]-1:
-            disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid2[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < 32 and action.position[1]+dy < 32 and action.position[2]+dz < 32])
+            disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid2[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < self.grid_size and action.position[1]+dy < self.grid_size and action.position[2]+dz < self.grid_size])
             
     if action.bond>=self.atom_hands[action.atom_type]-1:
-        disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid2[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < 32 and action.position[1]+dy < 32 and action.position[2]+dz < 32])
+        disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid2[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < self.grid_size and action.position[1]+dy < self.grid_size and action.position[2]+dz < self.grid_size])
             
-    # else:
-        # disable_index =  [(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < 32 and action.position[1]+dy < 32 and action.position[2]+dz < 32]
     if action.bond+self.have_bond[action.selected_index]>=self.atom_hands[newState.state_index[action.selected_index][0]]-1:
         s_pos = newState.state_index[action.selected_index]
-        disable_index.extend([(s_pos[1]+dx, s_pos[2]+dy, s_pos[3]+dz) for dx, dy, dz in self.invalid2[s_pos[0]] if s_pos[1]+dx>=0 and s_pos[2]+dy>=0 and s_pos[3]+dz>=0 and s_pos[1]+dx < 32 and s_pos[2]+dy < 32 and s_pos[3]+dz < 32])
+        disable_index.extend([(s_pos[1]+dx, s_pos[2]+dy, s_pos[3]+dz) for dx, dy, dz in self.invalid2[s_pos[0]] if s_pos[1]+dx>=0 and s_pos[2]+dy>=0 and s_pos[3]+dz>=0 and s_pos[1]+dx < self.grid_size and s_pos[2]+dy < self.grid_size and s_pos[3]+dz < self.grid_size])
 
     newState.disable_index.extend(disable_index) 
     newState.disable_index = list(set(newState.disable_index))
-    newState.current_player = self.current_player
     newState.have_bond[action.selected_index] = newState.have_bond[action.selected_index] + action.bond
     newState.have_bond.append(newBond)
     newState.next_actions=[]
-    # newState.qed_list.append(newState.getQED())
 
     for s in newState.state_index:
       t, x, y, z = s
@@ -346,20 +322,13 @@ class GridState(StateInterface):
     return newState
 
   def isTerminal(self):
-    # if np.min(self.voxel[self.state_index[-1][0], self.state_index[-1][1], self.state_index[-1][2], self.state_index[-1][3]]) == 0:
-    #   qed, sa_score, vina_score = self.get_scores()
-    #   with open(f"{self.target}.csv", "a") as file_object:
-    #     file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.raw_voxel*self.state_voxel)}, {len(self.state_index)}\n")
-    #   return True
-    if len(self.state_index)-self.length > 29:
+
+    if len(self.state_index) >= self.max_length:
       qed, sa_score, vina_score = self.get_scores()
       with open(f"{self.target}.csv", "a") as file_object:
         file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.raw_voxel*self.state_voxel)}, {len(self.state_index)}\n")
       return True
-    # if 0 > self.qed_list[-1]:
-    #   with open("sample.csv", "a") as file_object:
-    #     file_object.write(f"{self.__hash__()}, {self.qed_list[-1]}, {np.sum(self.voxel*self.state_voxel)}, {len(self.state_index)}\n")
-    #   return True
+
     if len(self.getPossibleActions()) == 0:
       qed, sa_score, vina_score = self.get_scores()
       with open(f"{self.target}.csv", "a") as file_object:
@@ -368,10 +337,7 @@ class GridState(StateInterface):
     return False
 
   def getReward(self):
-    # if self.qed == -1:
-    #   return 0.5*-self.vina_score
-    # if self.vina_score > 200:
-    #   return -1 
+
     if len(self.state_index)>10:
       return -self.vina_score
     else:
@@ -381,43 +347,39 @@ class GridState(StateInterface):
     warnings.filterwarnings('ignore')
     points = self.index2point()
 
-    to_xyz_file(origin(points, self.center), f"{self.target}/tmp/test{len(self.state_index)}.xyz")
+    to_xyz_file(origin(points, self.center), f"{self.target}/mols/tmp{len(self.state_index)}.xyz")
     obConversion1 = openbabel.OBConversion()
     obConversion2 = openbabel.OBConversion()
     mol = openbabel.OBMol()
     obConversion1.SetInAndOutFormats("xyz", "sdf")
     obConversion2.SetInAndOutFormats("sdf", "pdbqt")
-    obConversion1.ReadFile(mol, f"{self.target}/tmp/test{len(self.state_index)}.xyz")
+    obConversion1.ReadFile(mol, f"{self.target}/mols/tmp{len(self.state_index)}.xyz")
     
-    obConversion1.WriteFile(mol, f"{self.target}/tmp/{self.__hash__()}.sdf")
+    obConversion1.WriteFile(mol, f"{self.target}/mols/{self.__hash__()}.sdf")
     cmd = pymol.cmd
 
     cmd.delete("all")
-    cmd.load(f"{self.target}/tmp/{self.__hash__()}.sdf")
+    cmd.load(f"{self.target}/mols/{self.__hash__()}.sdf")
     cmd.h_add("all")
-    cmd.save(f"{self.target}/tmp/{self.__hash__()}.sdf")
-    obConversion2.ReadFile(mol, f"{self.target}/tmp/{self.__hash__()}.sdf")
-    obConversion2.WriteFile(mol, f"{self.target}/tmp/{self.__hash__()}.pdbqt")
-    # subprocess.run(["obabel",f"{self.target}/tmp/test{len(self.state_index)}.xyz","-O",f"{self.target}/tmp/{self.__hash__()}.sdf", "-h"]) 
-    # subprocess.run(["obabel",f"{self.target}/tmp/{self.__hash__()}.sdf","-O",f"{self.target}/tmp/{self.__hash__()}.pdbqt", "-h"]) 
+    cmd.save(f"{self.target}/mols/{self.__hash__()}.sdf")
+    obConversion2.ReadFile(mol, f"{self.target}/mols/{self.__hash__()}.sdf")
+    obConversion2.WriteFile(mol, f"{self.target}/mols/{self.__hash__()}.pdbqt")
+
     gc.collect()
     try:
-      df = PandasTools.LoadSDF(f"{self.target}/tmp/{self.__hash__()}.sdf")
+      df = PandasTools.LoadSDF(f"{self.target}/mols/{self.__hash__()}.sdf")
       df["QED"] = df.ROMol.map(QED.qed)
       df['SA_score'] = df.ROMol.map(sascorer.calculateScore)
-      if not exists(f"{self.target}/tmp/{self.__hash__()}.pdbqt"):
+      if not exists(f"{self.target}/mols/{self.__hash__()}.pdbqt"):
         vina_score=99
       else:
-        vina_score=calc_vina_score(f"{self.target}/tmp/{self.__hash__()}.pdbqt", os.path.join(
-            hydra.utils.to_absolute_path(f"test_data/{self.target}/receptor.pdbqt")), self.center)
+        vina_score=calc_vina_score(f"{self.target}/mols/{self.__hash__()}.pdbqt", os.path.join(
+            hydra.utils.to_absolute_path(f"{self.data_dir}/{self.target}/receptor.pdbqt")), self.center)
       
-      # print(df["QED"], len(self.state_index))
       self.qed=df["QED"][0]
       self.vina_score=vina_score
       return  df["QED"][0], df["SA_score"][0], vina_score
     except Exception as e:
-      # print("error", len(self.state_index))
-      print(e)
       self.qed=-1
       self.vina_score=99
       return  -1, 10, 99
@@ -445,48 +407,27 @@ def origin(atoms, c):
     return new_atoms
 
 
+from os.path import exists
+from predict import *
 @hydra.main(config_name="search_params.yml")
 def main(cfg):
-    if cfg.target == "":
-      sys.exit()
-    try:
+    assert cfg.target != ""
+
+    if not exists(f"{cfg.target}"):
       os.mkdir(f"{cfg.target}")
-      os.mkdir(f"{cfg.target}/trajectory")
-      os.mkdir(f"{cfg.target}/tmp")
-    except Exception as e:
-      print(e)
-    state = GridState(cfg.target, cfg.setting.use_knowledge)
-    searcher = mcts(iterationLimit=10000, use_knowledge=cfg.setting.use_knowledge)
-    pre_reward = -1
-    reward = 0
-    count = 0
-    action = None
+      
+    if not exists(f"{cfg.target}/mols"):
+      os.mkdir(f"{cfg.target}/mols")
+
+    state = GridState(cfg)
+    searcher = mcts(iterationLimit=cfg.iterationLimit, use_knowledge=cfg.setting.use_knowledge)
     
-    center=calc_center_ligand(get_mol(os.path.join(hydra.utils.to_absolute_path(""), f"test_data/{cfg.target}/crystal_ligand.mol2")))
     with open(f"{cfg.target}.csv", "w") as file_object:
       file_object.write("hash, qed, sascore, vina_socre, score, length\n")
-    # while pre_reward < reward:
-    while count < 1 and len(state.getPossibleActions()) > 0:
-        # pre_reward = reward
-        if action != None:
-            state = state.takeAction(action) 
-            state.length = len(state.state_index) 
-        to_xyz_file(origin(voxel_to_xyz(state.state_voxel, 0.5, [0.02, 0.02, 0.02, 0.02]), center), f"{cfg.target}/trajectory/test{count}.xyz")
-        subprocess.run(["obabel",f"{cfg.target}/trajectory/test{count}.xyz","-O",f"{cfg.target}/trajectory/test{count}.pdb"]) 
-        subprocess.run(["rm",f"{cfg.target}/trajectory/test{count}.xyz"]) 
-        # print(state.voxel[np.where(state.state_voxel>0)])
-        print(state.state_index)
-        action = searcher.search(initialState=state)
-        #   reward = bestAction["expectedReward"]
-        pre_reward = state.getReward()
-        print(reward, pre_reward)
+    
+    searcher.search(initialState=state)
 
-        #   action = bestAction["action"]
-        count+=1
 
-import signal
-import atexit
-import time
 if __name__ == "__main__":
     main()
   
