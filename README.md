@@ -12,7 +12,7 @@ Common:
 - hydra 2.5
 - pymol 2.3.5
 
-Network:
+Machine Learning:
 - pytorch 1.10.1
 - pytorch-lightning 1.5.7
 - mlflow 1.17.0
@@ -41,8 +41,14 @@ Outputs
 - target.csv 生成化合物のhash値，vinaスコア，QEDスコア，SAスコア，予測値の和
 - tmp/{生成化合物のhash値}.pdb 生成化合物のPDBファイル
 ```bash
-python generator/search.py
-    // --hydra.run.dir={生成先ディレクトリ名}
-    // --target={標的分子のファイル名} #defalt ace
+python generator/search.py \
+    hydra.run.dir={生成先ディレクトリ名} \
+    target={標的分子のファイル名} #defalt ace
 ```
 
+## Data Preparetion
+Machine Learning:
+
+PDBBind
+proteins pdbファイル
+ligands pdbファイル
