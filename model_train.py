@@ -12,10 +12,11 @@ import pandas as pd
 import os
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-# from joblib import parallel_backend, Parallel, delayed
 from utils.util import *
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+import random
+import sys
 class WrapperModel(pl.LightningModule):
     def __init__(self, model, loss, lr):
         super(WrapperModel, self).__init__()
@@ -61,18 +62,27 @@ class WrapperModel(pl.LightningModule):
 
 @hydra.main(config_name="params.yaml")
 def main(cfg: DictConfig) -> None:
-    model_type = "multi"
-    gpu_id=0
+    model_type = cfg.model.type
     pl.seed_everything(0)
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
-    data = pd.read_csv(os.path.join(
-        hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     loss = Loss()
     pdb_id_header = "pdb_id"
+    train_index_file = os.path.join(
+        hydra.utils.to_absolute_path(""), cfg.dataset.train_path)
 
+    try:
+        data = pd.read_csv(train_index_file)
+    except Exception:
+        print(f"Not Found test index file: {train_index_file}")
+        sys.exit(1)
 
-    test_used = pd.read_csv(os.path.join(
-                hydra.utils.to_absolute_path(""), cfg.dataset.test_path))
+    test_index_file = os.path.join(
+                hydra.utils.to_absolute_path(""), cfg.dataset.test_path)
+
+    try:
+        test_used = pd.read_csv(test_index_file)
+    except Exception:
+        print(f"Not Found test index file: {test_index_file}")
 
     data = data[~data[pdb_id_header].isin(test_used[pdb_id_header])]
     random.seed(0)
@@ -90,18 +100,19 @@ def main(cfg: DictConfig) -> None:
                     cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, True), batch_size=cfg.training.batch_size, num_workers=4)
                     
     try:
-        loaded_study = optuna.load_study(study_name="multi", storage="sqlite:///multi.db")
-        best_params = loaded_study.best_params    
-        hyperparameters = dict(block_num=best_params["block_num"], kernel_size=best_params["kernel_size"],
-        f_map=[best_params[f"channels_{i}"] for i in range(best_params["block_num"])],
-        pool_type=best_params["pool"], pool_kernel_size=best_params["pool_kernel_size"],
-                                latent_dim=0, in_channel=7, out_channel=3, lr=best_params["lr"], drop_out=0)
-        hyperparameters = AttributeDict(hyperparameters)
-        lr = best_params["lr"]
-    except Exception:
-        hyperparameters  = None
-        lr = 0.001
+        loaded_study = optuna.load_study(study_name=model_type, storage=f"sqlite:///{model_type}.db")
 
+    except Exception:
+        print(f"Not Found file: {model_type}.db")
+        sys.exit(1)
+
+    best_params = loaded_study.best_params    
+    hyperparameters = dict(block_num=best_params["block_num"], kernel_size=best_params["kernel_size"],
+    f_map=[best_params[f"channels_{i}"] for i in range(best_params["block_num"])],
+    pool_type=best_params["pool"], pool_kernel_size=best_params["pool_kernel_size"],
+                            latent_dim=0, in_channel=7, out_channel=cfg.model.output_channel, lr=best_params["lr"], drop_out=0)
+    hyperparameters = AttributeDict(hyperparameters)
+    lr = best_params["lr"]
     model = UNet(hyperparameters).to(device)    
     model = WrapperModel(model, loss, lr)
 

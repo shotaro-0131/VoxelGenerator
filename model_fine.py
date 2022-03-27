@@ -14,31 +14,8 @@ from optuna.integration import PyTorchLightningPruningCallback
 from multiprocessing import Process
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-class AttributeDict(object):
-    def __init__(self, obj):
-        self.obj = obj
-
-    def __getstate__(self):
-        return self.obj.items()
-
-    def __setstate__(self, items):
-        if not hasattr(self, 'obj'):
-            self.obj = {}
-        for key, val in items:
-            self.obj[key] = val
-
-    def __getattr__(self, name):
-        if name in self.obj:
-            return self.obj.get(name)
-        else:
-            return None
-
-    def fields(self):
-        return self.obj
-
-    def keys(self):
-        return self.obj.keys()
-
+from utils.util import *
+import random
 
 def print_auto_logged_info(r):
     tags = {k: v for k, v in r.data.tags.items() if not k.startswith("mlflow.")}
@@ -81,7 +58,7 @@ class WrapperModel(pl.LightningModule):
         pass 
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
+        return torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
 
 GPU_ID=0
@@ -90,17 +67,24 @@ def main(cfg: DictConfig) -> None:
     gpu_id=GPU_ID
     pl.seed_everything(0)
     device = torch.device("cuda:{}".format(gpu_id)) if torch.cuda.is_available() else "cpu"
-    # device = torch.device("cuda")
+
     data = pd.read_csv(os.path.join(
         hydra.utils.to_absolute_path(""), cfg.dataset.train_path))
     loss = Loss()
     pdb_id_header = "pdb_id"
+
+    random.seed(0)
+    random_index=list(range(len(data)))
+    random.shuffle(random_index)
+    val_index=random_index[:2500]
+    train_index=random_index[2500:7500]
+
     dataloader = DataLoader(
-        DataSet(data[pdb_id_header].values[:5000],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, True), batch_size=cfg.training.batch_size, num_workers=4)
+        DataSet(data[pdb_id_header].values[val_index],
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size, is_numpy=True, is_train=True), batch_size=cfg.training.batch_size, num_workers=4)
     val_dataloader = DataLoader(
-        DataSet(data[pdb_id_header].values[5000:7500],
-                cfg.preprocess.cell_size, cfg.preprocess.grid_size, True, False), batch_size=cfg.training.batch_size)
+        DataSet(data[pdb_id_header].values[train_index],
+                cfg.preprocess.cell_size, cfg.preprocess.grid_size, is_numpy=True, is_train=False), batch_size=cfg.training.batch_size)
 
     def objective(trial: optuna.trial.Trial):
 
@@ -108,7 +92,7 @@ def main(cfg: DictConfig) -> None:
         kernel_size = trial.suggest_int("kernel_size", 3, 7, step=2)
         pool_type = trial.suggest_categorical("pool", ["max", "ave"])
         pool_kernel_size = trial.suggest_int("pool_kernel_size", 2, 2, log=True)
-        output_channel = 1 if cfg.model.type == "normal" else 3
+        output_channel = cfg.model.output_channel
 
         f_map = [
             trial.suggest_int("channels_{}".format(i), 32, 252, log=True) for i in range(block_num)
@@ -127,7 +111,6 @@ def main(cfg: DictConfig) -> None:
                              checkpoint_callback=False,
                              callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_loss"), EarlyStopping(monitor="val_loss", patience =2)])
         model = WrapperModel(model, loss, lr).to(device)
-
 
         mlflow.pytorch.autolog(log_models=False)
         experiment = mlflow.get_experiment_by_name(f"{cfg.model.type}")

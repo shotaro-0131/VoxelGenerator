@@ -18,35 +18,6 @@ GRID_LENGTH = 20
 import random
 import scipy
 import scipy.ndimage
-from scipy.ndimage.interpolation import shift
-def random_rotation_3d(batch, max_angle):
-    size = batch[0].shape
-    new_batch = [np.zeros(size) for i in range(len(batch))]
-    angles = [random.uniform(-max_angle, max_angle) for i in range(3)]
-    for j in range(len(batch)):
-        for i in range(size[0]):
-            image1 = batch[j][i]
-                # rotate along z-axis
-            image2 = scipy.ndimage.interpolation.rotate(
-                image1, angles[0], mode='nearest', axes=(0, 1), reshape=False)
-
-                # rotate along y-axis
-            image3 = scipy.ndimage.interpolation.rotate(
-                image2, angles[1], mode='nearest', axes=(0, 2), reshape=False)
-                # rotate along x-axis
-            new_batch[j][i] = scipy.ndimage.interpolation.rotate(
-                image3, angles[2], mode='nearest', axes=(1, 2), reshape=False)
-
-    return new_batch
-
-def random_shift_3d(batch, max_shift):
-    size = batch[0].shape
-    shifts = [random.uniform(-max_shift, max_shift) for i in range(3)]
-    new_batch = [np.zeros(size) for i in range(len(batch))]
-    for j in range(len(batch)):
-        for i in range(size[0]):
-            new_batch[j][i] = shift(batch[j][i], shifts, cval=0)
-    return new_batch
 
 
 atoms_info = {
@@ -154,7 +125,7 @@ def get_mol(filename):
     # RDLogger.DisableLog('rdApp.*')
     warnings.filterwarnings('ignore')
     cmd = pymol.cmd
-    base, ext = os.path.splitext(filename)
+    _, ext = os.path.splitext(filename)
     mol = []
 
     if ext == '.mol2' or ext == '.sdf' or ext == ".pdb":
@@ -173,7 +144,7 @@ def get_bonds(ligand_path, protein_path):
     # RDLogger.DisableLog('rdApp.*'))
     warnings.filterwarnings('ignore')
     cmd = pymol.cmd
-    base, ext = os.path.splitext(ligand_path)
+    _, ext = os.path.splitext(ligand_path)
     mol = []
 
     if ext == '.mol2' or ext == '.sdf' or ext == ".pdb":
@@ -254,38 +225,6 @@ def fill_cell(array, p, cell_size=1, around=False):
 
     
 from scipy import signal
-def filtering(voxel):
-    new_voxel = np.zeros(voxel.shape)
-    sigma = 1.0 
-    x = np.arange(-1,1,1)
-    y = np.arange(-1,1,1)
-    z = np.arange(-1,1,1)
-    xx, yy, zz = np.meshgrid(x,y,z)
-    kernel = np.exp(-(xx**2 + yy**2 + zz**2)/(2*sigma**2))
-    # kernel[2,2,2] = kernel[2,2,2]*2
-    for i in range(voxel.shape[0]):
-        new_voxel[i] = signal.convolve(voxel[i], kernel, mode="same")
-    return new_voxel
-
-def recovery(voxel):
-    new_voxel = np.zeros(voxel.shape)
-    """
-    kernel = np.array([[[0, -1, -1, -1, 0],
-    [-1, 2, -4, 2, -1],
-    [-1, -4, 13, -4, 6],
-    [-1, 2, -4, 2, -1],
-    [0, -1, -1, -1, 0]]])
-    """
-    kernel = np.array([[[1, 4, 6, 4, 1],
-    [4, 16, 24, 16, 4],
-    [6, 24, -476, 24, 6],
-    [4, 16, 24, 16, 4],
-    [1, 4, 6, 4, 1]]])
-    kernel = -kernel/256
-    # kernel = np.array([[[0,-1,0],[-1,5,-1],[0,-1,0]]])
-    for i in range(3):
-        new_voxel[i] = signal.convolve(voxel[i], kernel, mode="same")
-    return new_voxel
 
 def to_voxel(points, n_cell=20, cell_size=1, around=False):
     voxel = np.zeros(n_cell**3 * len(atoms_info), dtype=np.int8)\
@@ -338,13 +277,6 @@ def savegrid(d, filename, threshold=[0.2, 0.2, 0.2]):
     ax = fig.gca(projection='3d')
     ax.voxels(voxels, facecolors=colors, edgecolor='k')
     plt.savefig(filename, dpi=140)
-
-def score_grid(true_grid, target_grid, is_rotation=False):
-    score = 0
-    for i in range(3):
-        score += average_precision_score(true_grid[:,i].reshape(true_grid.shape[0], -1)[:,:10],target_grid[:,i].reshape(len(true_grid), -1)[:,:10])
-    return score / 3
-
 
 def Rx(theta):
     return np.matrix([[1, 0, 0],

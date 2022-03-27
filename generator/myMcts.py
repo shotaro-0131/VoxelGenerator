@@ -22,8 +22,8 @@ class MyMcts(mcts):
             super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, myPolicy)
         else:
             super(MyMcts, self).__init__(timeLimit, iterationLimit, explorationConstant, randomPolicy)
-        self.Q = np.zeros((3, 32, 32, 32))
-        self.N = np.zeros((3, 32, 32, 32))
+        # self.Q = np.zeros((3, 32, 32, 32))
+        # self.N = np.zeros((3, 32, 32, 32))
 
     def search(self, initialState, needDetails=False):
         self.root = treeNode(initialState, None)
@@ -49,9 +49,9 @@ class MyMcts(mcts):
         """
         node = self.selectNode(self.root)
         reward = self.rollout(node.state)
-        for (t, x, y, z) in node.state.state_index:
-            self.Q[t, x, y, z] += reward
-            self.N[t, x, y, z] += 1.0
+        # for (t, x, y, z) in node.state.state_index:
+        #     self.Q[t, x, y, z] += reward
+        #     self.N[t, x, y, z] += 1.0
         self.backpropogate(node, reward)
 
     def selectNode(self, node):
@@ -75,21 +75,17 @@ class MyMcts(mcts):
         raise Exception("Should never reach here")
 
     def getBestChild(self, node, explorationValue):
-        print(node.numVisits)
-        print(len(node.children))
         bestValue = float("-inf")
         bestNodes = []
         for child in node.children.values():
-            # nodeValue = child.totalReward / child.numVisits + math.sqrt(node.numVisits)/(1+child.numVisits)
             nodeValue = child.totalReward / child.numVisits + explorationValue * math.sqrt(
                 2 * math.log(node.numVisits) / child.numVisits)
-            if self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]] != 0:
-                nodeValue += self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]/self.N[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]
+            # if self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]] != 0:
+            #     nodeValue += self.Q[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]/self.N[child.state.state_index[-1][0],child.state.state_index[-1][1],child.state.state_index[-1][2],child.state.state_index[-1][3]]
             if nodeValue > bestValue:
                 bestValue = nodeValue
                 bestNodes = [child]
             elif nodeValue == bestValue:
                 bestNodes.append(child)
-        print(bestValue)
         return random.choice(bestNodes)
 

@@ -18,6 +18,20 @@ from score import calc_vina_score
 from os.path import exists
 
 from openbabel import openbabel
+
+import numpy as np
+import itertools
+
+from copy import deepcopy
+import math
+    
+import hashlib
+import subprocess
+from utils.preprocess import *
+import gc
+from os.path import exists
+from predict import *
+import os 
 class StateInterface():
     def getCurrentPlayer(self):
         # 1 for maximiser, -1 for minimiser
@@ -75,11 +89,6 @@ class AtomAdd(ActionInterface):
   def __hash__(self):
     return hash((self.position[0], self.position[1], self.position[2], self.atom_type, self.bond, self.__class__, self.connected_index, self.connected_bond))
 
-import numpy as np
-import itertools
-
-from copy import deepcopy
-import math
 
 class BondType:
     def __init__(self, atoms, min_len, max_len, hands):
@@ -128,7 +137,6 @@ MAX_LENGTH=[C1+C1+MARGIN, C1+O1+MARGIN, C1+N1+MARGIN]
 # BondTypes=[CC1, CC2, CC3, CO1, CO2, CN1, CN2, CN3]
 BondTypes=[CC1,CC2,CO1,CO2,CN1,CN2]
 
-import os 
 
 class GridState(StateInterface):
   def __init__(self, cfg):
@@ -153,14 +161,14 @@ class GridState(StateInterface):
     self.bondTypes = [[x for x in BondTypes if t in x.atoms] for t in [0,1,2]]
     self.disable_index = []
 
-    self.invalid2=[[(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if 0.25*(dx*dx + dy*dy + dz*dz) < l*l] for l in MAX_LENGTH]
+    self.invalid=[[(dx, dy, dz) for dx, dy, dz in itertools.product(np.arange(-1*2,2+1,1), repeat=3) if 0.25*(dx*dx + dy*dy + dz*dz) < l*l] for l in MAX_LENGTH]
     self.connected_atoms = [[]]
     self.qed_list = [0]
     self.qed_penalty=cfg.penalty.qed
     self.vina_score_penalty=cfg.penalty.vina_score
-    self.qed=-1
-    self.vina_score=99
-    self.max_length=cfg.max_length
+    self.qed=cfg.penalty.qed
+    self.vina_score=cfg.penalty.vina_score
+    self.stop_length=cfg.stop_length
     self.next_actions=[]
     self.next_probs=[]
 
@@ -299,16 +307,16 @@ class GridState(StateInterface):
         newBond = newBond + action.connected_bond
         if self.have_bond[action.connected_index] + action.connected_bond  >= self.atom_hands[self.state_index[action.connected_index][0]]-1:
           c_pos = newState.state_index[action.connected_index]
-          disable_index.extend([(c_pos[1]+dx, c_pos[2]+dy, c_pos[3]+dz) for dx, dy, dz in self.invalid2[c_pos[0]] if c_pos[1]+dx>=0 and c_pos[2]+dy>=0 and c_pos[3]+dz>=0 and c_pos[1]+dx < self.grid_size and c_pos[2]+dy < self.grid_size and c_pos[3]+dz < self.grid_size])
+          disable_index.extend([(c_pos[1]+dx, c_pos[2]+dy, c_pos[3]+dz) for dx, dy, dz in self.invalid[c_pos[0]] if c_pos[1]+dx>=0 and c_pos[2]+dy>=0 and c_pos[3]+dz>=0 and c_pos[1]+dx < self.grid_size and c_pos[2]+dy < self.grid_size and c_pos[3]+dz < self.grid_size])
         if action.connected_bond+action.bond>=self.atom_hands[action.atom_type]-1:
-            disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid2[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < self.grid_size and action.position[1]+dy < self.grid_size and action.position[2]+dz < self.grid_size])
+            disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < self.grid_size and action.position[1]+dy < self.grid_size and action.position[2]+dz < self.grid_size])
             
     if action.bond>=self.atom_hands[action.atom_type]-1:
-        disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid2[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < self.grid_size and action.position[1]+dy < self.grid_size and action.position[2]+dz < self.grid_size])
+        disable_index.extend([(action.position[0]+dx, action.position[1]+dy, action.position[2]+dz) for dx, dy, dz in self.invalid[action.atom_type] if action.position[0]+dx>=0 and action.position[1]+dy>=0 and action.position[2]+dz>=0 and action.position[0]+dx < self.grid_size and action.position[1]+dy < self.grid_size and action.position[2]+dz < self.grid_size])
             
     if action.bond+self.have_bond[action.selected_index]>=self.atom_hands[newState.state_index[action.selected_index][0]]-1:
         s_pos = newState.state_index[action.selected_index]
-        disable_index.extend([(s_pos[1]+dx, s_pos[2]+dy, s_pos[3]+dz) for dx, dy, dz in self.invalid2[s_pos[0]] if s_pos[1]+dx>=0 and s_pos[2]+dy>=0 and s_pos[3]+dz>=0 and s_pos[1]+dx < self.grid_size and s_pos[2]+dy < self.grid_size and s_pos[3]+dz < self.grid_size])
+        disable_index.extend([(s_pos[1]+dx, s_pos[2]+dy, s_pos[3]+dz) for dx, dy, dz in self.invalid[s_pos[0]] if s_pos[1]+dx>=0 and s_pos[2]+dy>=0 and s_pos[3]+dz>=0 and s_pos[1]+dx < self.grid_size and s_pos[2]+dy < self.grid_size and s_pos[3]+dz < self.grid_size])
 
     newState.disable_index.extend(disable_index) 
     newState.disable_index = list(set(newState.disable_index))
@@ -323,7 +331,7 @@ class GridState(StateInterface):
 
   def isTerminal(self):
 
-    if len(self.state_index) >= self.max_length:
+    if len(self.state_index) >= self.stop_length:
       qed, sa_score, vina_score = self.get_scores()
       with open(f"{self.target}.csv", "a") as file_object:
         file_object.write(f"{self.__hash__()}, {qed}, {sa_score}, {vina_score}, {np.sum(self.raw_voxel*self.state_voxel)}, {len(self.state_index)}\n")
@@ -393,11 +401,7 @@ class GridState(StateInterface):
       return hashlib.md5(str(hash((self.__class__, str(self.state_index)))).encode()).hexdigest()
     else:
       return hashlib.md5(str(hash((self.__class__, str(state_index)))).encode()).hexdigest()
-    
-import hashlib
-import subprocess
-from utils.preprocess import *
-import gc
+
 def origin(atoms, c):
     new_atoms = []
     for a in atoms:
@@ -407,8 +411,6 @@ def origin(atoms, c):
     return new_atoms
 
 
-from os.path import exists
-from predict import *
 @hydra.main(config_name="search_params.yml")
 def main(cfg):
     assert cfg.target != ""

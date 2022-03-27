@@ -1,15 +1,19 @@
-from utils.preprocess import *
+from utils.preprocess import random_rotate, random_shift, to_voxel, get_points
 import torch
 import os
 import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
+import pandas as pd
+from torch.utils.data import DataLoader
 
-
-def get_data_dir() -> str:
-    # return cfg.data_dir
+def get_conf():
     conf = OmegaConf.load(os.path.join(
         hydra.utils.to_absolute_path(""), "params.yaml"))
+    return conf
+
+def get_data_dir() -> str:
+    conf = get_conf()
     return conf.dataset.data_dir
 
 
@@ -24,14 +28,14 @@ class DataSet():
         self.protein_path = "_pocket.pdb"
         self.ligand_path = "_ligand.sdf"
         self.train = is_train
+        self.output_channel = 3
 
-          
     def __len__(self):
         return len(self.pdb_id)
 
     def __getitem__(self, index):
         if self.is_numpy:
-          input_data, output_data = np.load(os.path.join(*self.data_dir).replace("v2020_PL_all", f"v2020-points/v2020-points-{self.pdb_id[index]}.npy"), allow_pickle=True)
+          input_data, output_data = np.load(os.path.join(*get_conf().dataset.numpy_data_dir, f"v2020-points-{self.pdb_id[index]}.npy"), allow_pickle=True)
 
           if self.train:
               input_data, output_data = random_rotate([input_data, output_data])
@@ -39,7 +43,7 @@ class DataSet():
           input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)
 
           output_data = to_voxel(
-              output_data, self.voxel_num, self.voxel_size)[:3]
+              output_data, self.voxel_num, self.voxel_size)[:self.output_channel]
 
           
         else:
@@ -55,26 +59,10 @@ class DataSet():
           input_data = to_voxel(input_data, self.voxel_num, self.voxel_size)
 
           output_data = to_voxel(
-              output_data, self.voxel_num, self.voxel_size)[:3]
+              output_data, self.voxel_num, self.voxel_size)[:self.output_channel]
         input_data = torch.FloatTensor(input_data)
         output_data = torch.FloatTensor(output_data)
 
         return input_data, output_data
 
-import pandas as pd
-from torch.utils.data import DataLoader
-def get_data_loader():
-    data = pd.read_csv("v2020_index.csv")
-    pdb_id_header = "pdb_id"
-    test_used = ["3bkl", "2oi0"]
-    data = data[~data[pdb_id_header].isin(test_used)]
-    val_dataloader = DataLoader(
-        DataSet(data[pdb_id_header].values[15554:17498],
-                0.5, 32, True, False), batch_size=10)
-
-    # seed=random.sample(range(11000), k=5000)
-    dataloader = DataLoader(
-            DataSet(data[pdb_id_header].values[:15554],
-                    0.5, 32, True, True), batch_size=10, num_workers=2)
-    return dataloader, val_dataloader
     
