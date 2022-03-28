@@ -40,6 +40,16 @@ Training:<br>
 ```bash
 python model_train.py
 ```
+
+Predition:<br>
+訓練したモデルで予測
+```bash
+python predict.py # dataset.test.index_file=v2020_test_index.csv dataset.test.data_dir=test_data
+```
+- v2020_test_index.csv: DUD-Eのデータのタンパク質名
+- test_data: 詳細は[Data PreparetionのテストデータDirectory](#テストデータDirectory)を参照．
+
+
 Molecular Generation:<br>
 訓練したモデルの予測値から分子を生成する<br>
 Outputs
@@ -69,9 +79,35 @@ python generator/search.py \
 以下のようにデータを配置する．
 - /test_data/{target名} : [DUD-E Diverseサブセットのデータ](http://dude.docking.org/subsets/diverse)
   - /receptor.pdb : タンパク質のPDBファイル(Inputに使用)
-  - /receptor.pdbqt : タンパク質のPDBQTファイル(Dockingに使用)
+  - /receptor.pdbqt : タンパク質のPDBQTファイル(Dockingに使用．詳細は[PDBQTファイルの作り方](#PDBQTファイルの作り方)を参照)
   - /pred_voxel.npy : 機械学習で予測したボクセルデータ([UsageのPrediction](#Usage)で生成)
 
+### PDBQTファイルの作り方
+Auto Dock Vinaでドッキングスコアを計算する際には，化合物をPDBQTファイルに変換しなければならない．
+
+Openbabelを使用する．
+- リガンドのPDBQTファイルの作成
+```bash
+obabel {ligand file name} -O {出力先ファイル名}.pdbqt -xh --partialcharge gasteiger
+```
+
+- タンパク質のPDBQTファイルの作成
+```bash
+obabel {protein file name} -O tmp.pdbqt -xh --partialcharge gasteiger
+grep ATOM tmp.pdbqt > {出力先ファイル名}.pdbqt
+rm tmp.pdbqt
+```
+
+実際にドッキングスコアを計算できるか確かめる．
+```bash
+python score.py {ligand file name}.pdbqt {protein file name}.pdbqt
+```
+
+以下のような出力があればOK．
+```bash
+Computing Vina grid ... done.
+Score before minimization: XXXX (kcal/mol)
+```
 
 ## Results
 ### 学習済みモデル
@@ -81,6 +117,6 @@ python generator/search.py \
 hydra.run.dirで指定する．
 
 指定したDirectoryの下に以下のファイルが出力される
-/{target}
+- /{target}
   - /target.csv : 生成化合物のhash値，vinaスコア，QEDスコア，SAスコア，予測値の和
   - /mols/{生成化合物のhash値}.pdb : 生成化合物のPDBファイル

@@ -20,7 +20,7 @@ def calc_vina_score(ligand_filename, receptor_filename, center):
         v = Vina(sf_name='vina')
         v.set_receptor(receptor_filename)
         v.set_ligand_from_file(ligand_filename)
-        v.compute_vina_maps(center=center, box_size=[32, 32, 32])
+        v.compute_vina_maps(center=center, box_size=[16, 16, 16])
         energy = v.score()
         value[procnum]=energy[0]
     def wait():

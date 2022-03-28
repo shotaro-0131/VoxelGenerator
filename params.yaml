@@ -1,8 +1,14 @@
 dataset:
-  train_path: v2020_index.csv
-  test_path: v2020_test_index.csv
-  data_dir: ["/mnt/d/", "v2020_PL_all"]
-  numpy_data_dir: ["/mnt/d/", "v2020-points"]
+  train:
+    index_file: v2020_index.csv
+    data_dir: ["/mnt/d/", "v2020_PL_all"]
+    numpy_data_dir: ["/mnt/d/", "v2020-points"]
+  test:
+    index_file: v2020_test_index.csv
+    data_dir: ["test_data"]
+    ligand_file: crystal_ligand.mol2
+    receptor_file: receptor.pdb
+
 preprocess:
   grid_size: 32
   cell_size: 0.5

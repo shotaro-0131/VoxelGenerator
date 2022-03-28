@@ -6,7 +6,7 @@ target: ""
 data_dir: test_data/
 predicted_file: pred_voxel.npy
 iterationLimit: 10000
-max_length: 30
+stop_length: 30
 penalty:
   qed: -1
   vina_score: 99
