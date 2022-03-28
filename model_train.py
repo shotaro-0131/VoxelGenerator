@@ -68,7 +68,7 @@ def main(cfg: DictConfig) -> None:
     loss = Loss()
     pdb_id_header = "pdb_id"
     train_index_file = os.path.join(
-        hydra.utils.to_absolute_path(""), cfg.dataset.train_path)
+        hydra.utils.to_absolute_path(""), cfg.dataset.train.index_file)
 
     try:
         data = pd.read_csv(train_index_file)
@@ -77,7 +77,7 @@ def main(cfg: DictConfig) -> None:
         sys.exit(1)
 
     test_index_file = os.path.join(
-                hydra.utils.to_absolute_path(""), cfg.dataset.test_path)
+                hydra.utils.to_absolute_path(""), cfg.dataset.test.index_file)
 
     try:
         test_used = pd.read_csv(test_index_file)
