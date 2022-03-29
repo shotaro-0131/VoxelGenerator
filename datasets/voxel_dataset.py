@@ -14,7 +14,7 @@ def get_conf():
 
 def get_data_dir() -> str:
     conf = get_conf()
-    return conf.dataset.data_dir
+    return conf.dataset.train.data_dir
 
 
 class DataSet():
@@ -35,7 +35,7 @@ class DataSet():
 
     def __getitem__(self, index):
         if self.is_numpy:
-          input_data, output_data = np.load(os.path.join(*get_conf().dataset.numpy_data_dir, f"v2020-points-{self.pdb_id[index]}.npy"), allow_pickle=True)
+          input_data, output_data = np.load(os.path.join(*get_conf().dataset.train.numpy_data_dir, f"v2020-points-{self.pdb_id[index]}.npy"), allow_pickle=True)
 
           if self.train:
               input_data, output_data = random_rotate([input_data, output_data])
