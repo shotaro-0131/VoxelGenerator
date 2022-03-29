@@ -69,7 +69,7 @@ Molecular Generation:<br>
 訓練したモデルの予測値から分子を生成する<br>
 Outputs
 - target.csv 生成化合物のhash値，vinaスコア，QEDスコア，SAスコア，予測値の和
-- tmp/{生成化合物のhash値}.pdb 生成化合物のPDBファイル
+- mols/{生成化合物のhash値}.pdb 生成化合物のPDBファイル
 ```bash
 python generator/search.py \
     hydra.run.dir={生成先ディレクトリ名} \
