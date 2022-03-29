@@ -24,6 +24,21 @@ Generator(MCTS):
 - rdkit>=2020.09.1.0
 - mcts https://pypi.org/project/mcts/
   
+## Methods
+### 機械学習手法に関して
+3D U-Netをベースに実装した．
+
+手法は2種類ある．
+
+- normal
+ 
+  スタンダードな3D U-Net詳細は修士論文の(既存モデル)を参照．
+- multi
+  
+  3D U-Netのデコーダを複数(原子の数)に分けたモデル．詳細は修士論文(独自モデル)を参照．
+### 生成手法に関して
+機械学習で予測した原子分布をもとにMCTSを行う．詳細は修士論文を参照．
+
 ## Usage
 [Hydra](https://hydra.cc/docs/intro//)でパラメータを管理しています．<br>
 - [params.yaml](params.yaml): Machine Learning関連のパラメータ管理
@@ -111,6 +126,8 @@ Score before minimization: XXXX (kcal/mol)
 
 ## Results
 ### 学習済みモデル
+TSUBAME上にあります．
+/gs/hs0/tga-science/murata/models
 
 ### 生成済み化合物
 生成した化合物を置くDirectoryは[generator/search_params.yaml](generator/search_params.yml)の
